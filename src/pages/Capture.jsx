@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
+import { mockQualityCheck } from '../cv/mockQualityCheck';
 
 export default function Capture() {
   const videoRef = useRef(null);
@@ -6,6 +7,7 @@ export default function Capture() {
   const [stream, setStream] = useState(null);
   const [error, setError] = useState('');
   const [photos, setPhotos] = useState([]); // array of dataUrl strings
+  const [retakePrompt, setRetakePrompt] = useState(null); // { reason } or null
 
   useEffect(() => {
     async function startCamera() {
@@ -36,7 +38,15 @@ export default function Capture() {
     canvas.height = video.videoHeight;
     canvas.getContext('2d').drawImage(video, 0, 0);
     const dataUrl = canvas.toDataURL('image/jpeg');
-    setPhotos((prev) => [...prev, dataUrl]);
+
+    const qualityResult = mockQualityCheck(dataUrl);
+
+    if (qualityResult.pass) {
+      setPhotos((prev) => [...prev, dataUrl]);
+      setRetakePrompt(null);
+    } else {
+      setRetakePrompt({ reason: qualityResult.reason });
+    }
   }
 
   function removePhoto(index) {
@@ -52,6 +62,12 @@ export default function Capture() {
       <button onClick={capturePhoto} style={{ marginTop: '1rem' }}>
         Capture Photo
       </button>
+      {retakePrompt && (
+        <div style={{ background: '#402020', padding: '1rem', marginTop: '1rem', border: '1px solid red' }}>
+          <p>⚠️ Retake needed: {retakePrompt.reason}</p>
+          <button onClick={() => setRetakePrompt(null)}>Dismiss</button>
+        </div>
+      )}
 
       <div style={{ marginTop: '1rem' }}>
         <p>{photos.length} photo{photos.length !== 1 ? 's' : ''} captured for this item</p>
