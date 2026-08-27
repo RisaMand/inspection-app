@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { useAuth } from './auth/useAuth';
 import ProtectedRoute from './auth/ProtectedRoute';
+import { useSession } from './session/useSession';
 import Login from './pages/Login';
 import StartSession from './pages/StartSession';
 import Capture from './pages/Capture';
@@ -15,15 +16,16 @@ import OfficerActivity from './pages/OfficerActivity';
 
 export default function App() {
   const { isLoggedIn, role, login, logout } = useAuth();
+  const { session, startSession, endSession } = useSession();
 
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Login login={login} />} />
 
-        <Route path="/session" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn}><StartSession /></ProtectedRoute>
-        } />
+       <Route path="/session" element={
+  <ProtectedRoute isLoggedIn={isLoggedIn}><StartSession startSession={startSession} /></ProtectedRoute>
+} />
         <Route path="/capture" element={
           <ProtectedRoute isLoggedIn={isLoggedIn}><Capture /></ProtectedRoute>
         } />
