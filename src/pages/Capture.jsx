@@ -73,6 +73,10 @@ export default function Capture() {
     setPhotos((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function triggerBarcodeStub() {
+    alert('Barcode scanning not yet implemented — pending Person 3 (CV) integration.');
+  }
+
   return (
     <div style={{ padding: '2rem', maxWidth: 500, margin: '0 auto' }}>
       <h1>Capture Label</h1>
@@ -93,6 +97,11 @@ export default function Capture() {
           Upload Photo
         </span>
       </label>
+
+      <button onClick={triggerBarcodeStub} style={{ marginLeft: '0.5rem' }}>
+        Scan Barcode
+      </button>
+
       {retakePrompt && (
         <div style={{ background: '#402020', padding: '1rem', marginTop: '1rem', border: '1px solid red' }}>
           <p>⚠️ Retake needed: {retakePrompt.reason}</p>
