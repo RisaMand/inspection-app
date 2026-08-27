@@ -15,7 +15,7 @@ import ReportViewer from './pages/ReportViewer';
 import OfficerActivity from './pages/OfficerActivity';
 
 export default function App() {
-  const { isLoggedIn, role, login, logout } = useAuth();
+  const { isLoggedIn, role, login, logout, authLoaded } = useAuth();
   const { session, startSession, addItem, endSession } = useSession();
 
   return (
@@ -24,34 +24,34 @@ export default function App() {
         <Route path="/" element={<Login login={login} />} />
 
         <Route path="/session" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn}><StartSession startSession={startSession} /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><StartSession startSession={startSession} /></ProtectedRoute>
         } />
         <Route path="/capture" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn}><Capture addItem={addItem} /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><Capture addItem={addItem} /></ProtectedRoute>
         } />
         <Route path="/item-result" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn}><ItemResult /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><ItemResult /></ProtectedRoute>
         } />
         <Route path="/seizure-memo" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn}><SeizureMemoReview /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><SeizureMemoReview /></ProtectedRoute>
         } />
         <Route path="/consolidated-report" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn}><ConsolidatedReport /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><ConsolidatedReport /></ProtectedRoute>
         } />
         <Route path="/dashboard" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn}><DashboardHome /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><DashboardHome /></ProtectedRoute>
         } />
         <Route path="/dashboard/filter" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn}><FilterDrilldown /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><FilterDrilldown /></ProtectedRoute>
         } />
         <Route path="/dashboard/search" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn}><Search /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><Search /></ProtectedRoute>
         } />
         <Route path="/dashboard/report/:id" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn}><ReportViewer /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><ReportViewer /></ProtectedRoute>
         } />
         <Route path="/dashboard/officer" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn}><OfficerActivity /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><OfficerActivity /></ProtectedRoute>
         } />
       </Routes>
     </BrowserRouter>
