@@ -49,6 +49,26 @@ export default function Capture() {
     }
   }
 
+  function handleFileUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      const qualityResult = mockQualityCheck(dataUrl);
+
+      if (qualityResult.pass) {
+        setPhotos((prev) => [...prev, dataUrl]);
+        setRetakePrompt(null);
+      } else {
+        setRetakePrompt({ reason: qualityResult.reason });
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = ''; // reset so the same file can be re-selected if needed
+  }
+
   function removePhoto(index) {
     setPhotos((prev) => prev.filter((_, i) => i !== index));
   }
@@ -62,6 +82,17 @@ export default function Capture() {
       <button onClick={capturePhoto} style={{ marginTop: '1rem' }}>
         Capture Photo
       </button>
+      <label style={{ marginLeft: '0.5rem', cursor: 'pointer' }}>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleFileUpload}
+          style={{ display: 'none' }}
+        />
+        <span style={{ padding: '0.5rem 1rem', border: '1px solid #888', borderRadius: '4px' }}>
+          Upload Photo
+        </span>
+      </label>
       {retakePrompt && (
         <div style={{ background: '#402020', padding: '1rem', marginTop: '1rem', border: '1px solid red' }}>
           <p>⚠️ Retake needed: {retakePrompt.reason}</p>
