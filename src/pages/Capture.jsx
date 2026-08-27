@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { mockQualityCheck } from '../cv/mockQualityCheck';
 
-export default function Capture() {
+export default function Capture({ addItem }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [stream, setStream] = useState(null);
@@ -77,6 +77,16 @@ export default function Capture() {
     alert('Barcode scanning not yet implemented — pending Person 3 (CV) integration.');
   }
 
+  function finishItem() {
+    if (photos.length === 0) {
+      alert('Capture at least one photo before finishing this item.');
+      return;
+    }
+    addItem(photos);
+    setPhotos([]);
+    alert('Item saved to session. Ready to scan next item.');
+  }
+
   return (
     <div style={{ padding: '2rem', maxWidth: 500, margin: '0 auto' }}>
       <h1>Capture Label</h1>
@@ -125,6 +135,9 @@ export default function Capture() {
           ))}
         </div>
       </div>
+      <button onClick={finishItem} style={{ marginTop: '1rem' }}>
+        Done with this item
+      </button>
     </div>
   );
 }

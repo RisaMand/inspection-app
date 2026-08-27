@@ -16,18 +16,18 @@ import OfficerActivity from './pages/OfficerActivity';
 
 export default function App() {
   const { isLoggedIn, role, login, logout } = useAuth();
-  const { session, startSession, endSession } = useSession();
+  const { session, startSession, addItem, endSession } = useSession();
 
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Login login={login} />} />
 
-       <Route path="/session" element={
-  <ProtectedRoute isLoggedIn={isLoggedIn}><StartSession startSession={startSession} /></ProtectedRoute>
-} />
+        <Route path="/session" element={
+          <ProtectedRoute isLoggedIn={isLoggedIn}><StartSession startSession={startSession} /></ProtectedRoute>
+        } />
         <Route path="/capture" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn}><Capture /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn}><Capture addItem={addItem} /></ProtectedRoute>
         } />
         <Route path="/item-result" element={
           <ProtectedRoute isLoggedIn={isLoggedIn}><ItemResult /></ProtectedRoute>

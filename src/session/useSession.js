@@ -1,16 +1,28 @@
 import { useState } from 'react';
 
 // In-memory for now — swap internals for IndexedDB when offline-save is built.
-// Nothing outside this file should need to change when that happens.
 export function useSession() {
-  const [session, setSession] = useState(null); // { visitNumber, shopNumber, gps, startedAt }
+  const [session, setSession] = useState(null); // { visitNumber, shopNumber, gps, startedAt, items: [] }
 
   function startSession(visitNumber, shopNumber, gps) {
     setSession({
       visitNumber,
       shopNumber,
-      gps, // { lat, lng } or null if denied/unavailable
+      gps,
       startedAt: new Date().toISOString(),
+      items: [], // each item: { id, photos: [dataUrl, ...], checkResult: null }
+    });
+  }
+
+  function addItem(photos) {
+    setSession((prev) => {
+      if (!prev) return prev;
+      const newItem = {
+        id: crypto.randomUUID(),
+        photos,
+        checkResult: null, // filled in later by Rule Engine step
+      };
+      return { ...prev, items: [...prev.items, newItem] };
     });
   }
 
@@ -18,5 +30,5 @@ export function useSession() {
     setSession(null);
   }
 
-  return { session, startSession, endSession };
+  return { session, startSession, addItem, endSession };
 }
