@@ -1,3 +1,4 @@
+import SyncStatus from './sync/SyncStatus';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { useAuth } from './auth/useAuth';
 import ProtectedRoute from './auth/ProtectedRoute';
@@ -20,6 +21,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <SyncStatus pendingCount={session?.items?.length ?? 0} />
       <Routes>
         <Route path="/" element={<Login login={login} />} />
 
