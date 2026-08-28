@@ -1,5 +1,7 @@
 import jsPDF from 'jspdf';
-export default function ConsolidatedReport({ session }) {
+import { useNavigate } from 'react-router-dom';
+export default function ConsolidatedReport({ session, endSession }) {
+  const navigate = useNavigate();
   if (!session) {
     return (
       <div style={{ padding: '2rem', maxWidth: 600, margin: '0 auto' }}>
@@ -69,6 +71,11 @@ export default function ConsolidatedReport({ session }) {
     doc.save(`visit-${visitNumber}-report.pdf`);
   }
 
+  function handleEndSession() {
+    endSession();
+    navigate('/session');
+  }
+
   const { visitNumber, shopNumber, gps, startedAt, items } = session;
 
   return (
@@ -78,6 +85,15 @@ export default function ConsolidatedReport({ session }) {
       <button onClick={exportPDF} style={{ marginBottom: '1rem' }}>
         Export PDF
       </button>
+
+      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <button onClick={() => navigate('/capture')}>
+          Scan Another Item
+        </button>
+        <button onClick={handleEndSession}>
+          End Inspection Session
+        </button>
+      </div>
 
       <section style={{ marginBottom: '1.5rem' }}>
         <p><strong>Visit Number:</strong> {visitNumber}</p>

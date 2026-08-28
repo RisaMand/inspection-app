@@ -38,7 +38,7 @@ export default function App() {
           <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><SeizureMemoReview /></ProtectedRoute>
         } />
         <Route path="/consolidated-report" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><ConsolidatedReport session={session} /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><ConsolidatedReport session={session} endSession={endSession} /></ProtectedRoute>
         } />
         <Route path="/dashboard" element={
           <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><DashboardHome /></ProtectedRoute>
