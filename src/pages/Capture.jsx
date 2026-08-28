@@ -84,9 +84,9 @@ export default function Capture({ addItem }) {
       alert('Capture at least one photo before finishing this item.');
       return;
     }
-    addItem(photos);
+    const itemId = addItem(photos);
     setPhotos([]);
-    navigate('/item-result');
+    navigate(`/item-result/${itemId}`);
   }
 
   return (

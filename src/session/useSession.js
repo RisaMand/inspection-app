@@ -51,11 +51,13 @@ export function useSession() {
   }
 
   function addItem(photos) {
+    const itemId = crypto.randomUUID();
+
     setSession((prev) => {
       if (!prev) return prev;
 
       const newItem = {
-        id: crypto.randomUUID(),
+        id: itemId,
         photos,
         checkResult: null,
       };
@@ -65,6 +67,8 @@ export function useSession() {
         items: [...prev.items, newItem],
       };
     });
+
+    return itemId;
   }
 
   function endSession() {

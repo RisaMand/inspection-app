@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import { useParams } from 'react-router-dom';
 
 export default function ItemResult({ session }) {
   if (!session || session.items.length === 0) {
@@ -10,12 +11,17 @@ export default function ItemResult({ session }) {
     );
   }
 
-  // PLACEHOLDER SELECTION: shows the most recently captured item.
-  // Real per-item routing (/item-result/:id) is deferred to the end-of-role
-  // UX/navigation pass — this stand-in lets the report/PDF logic itself be
-  // fully real and reusable now, swapped for real routing later without
-  // touching the report content or PDF generation below.
-  const item = session.items[session.items.length - 1];
+  const { id } = useParams();
+  const item = session.items.find((sessionItem) => sessionItem.id === id);
+
+  if (!item) {
+    return (
+      <div style={{ padding: '2rem', maxWidth: 500, margin: '0 auto' }}>
+        <h1>Item Report</h1>
+        <p>The requested item could not be found in this session.</p>
+      </div>
+    );
+  }
   const { visitNumber, shopNumber, startedAt } = session;
 
   function exportItemPDF() {

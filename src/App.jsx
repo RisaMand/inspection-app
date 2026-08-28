@@ -31,7 +31,7 @@ export default function App() {
         <Route path="/capture" element={
           <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><Capture addItem={addItem} /></ProtectedRoute>
         } />
-        <Route path="/item-result" element={
+        <Route path="/item-result/:id" element={
           <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><ItemResult session={session} /></ProtectedRoute>
         } />
         <Route path="/seizure-memo" element={
