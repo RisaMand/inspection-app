@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 export default function ItemResult({ session }) {
   if (!session || session.items.length === 0) {
@@ -12,6 +12,7 @@ export default function ItemResult({ session }) {
   }
 
   const { id } = useParams();
+  const navigate = useNavigate();
   const item = session.items.find((sessionItem) => sessionItem.id === id);
 
   if (!item) {
@@ -79,6 +80,15 @@ export default function ItemResult({ session }) {
       <button onClick={exportItemPDF} style={{ marginBottom: '1rem' }}>
         Export PDF
       </button>
+
+      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <button onClick={() => navigate('/capture')}>
+          Scan Another Item
+        </button>
+        <button onClick={() => navigate('/consolidated-report')}>
+          View Consolidated Visit Report
+        </button>
+      </div>
 
       <section style={{ marginBottom: '1rem' }}>
         <p><strong>Visit Number:</strong> {visitNumber}</p>
