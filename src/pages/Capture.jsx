@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import { mockQualityCheck } from '../cv/mockQualityCheck';
+import { useNavigate } from 'react-router-dom';
 
 export default function Capture({ addItem }) {
   const videoRef = useRef(null);
@@ -8,6 +9,7 @@ export default function Capture({ addItem }) {
   const [error, setError] = useState('');
   const [photos, setPhotos] = useState([]); // array of dataUrl strings
   const [retakePrompt, setRetakePrompt] = useState(null); // { reason } or null
+  const navigate = useNavigate();
 
   useEffect(() => {
     async function startCamera() {
@@ -84,7 +86,7 @@ export default function Capture({ addItem }) {
     }
     addItem(photos);
     setPhotos([]);
-    alert('Item saved to session. Ready to scan next item.');
+    navigate('/item-result');
   }
 
   return (
