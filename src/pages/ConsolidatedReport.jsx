@@ -1,3 +1,4 @@
+import jsPDF from 'jspdf';
 export default function ConsolidatedReport({ session }) {
   if (!session) {
     return (
@@ -8,11 +9,75 @@ export default function ConsolidatedReport({ session }) {
     );
   }
 
+  function exportPDF() {
+    const doc = new jsPDF();
+    let y = 15;
+
+    doc.setFontSize(16);
+    doc.text('Consolidated Visit Report', 10, y);
+    y += 10;
+
+    doc.setFontSize(11);
+    doc.text(`Visit Number: ${visitNumber}`, 10, y); y += 7;
+    doc.text(`Shop Number: ${shopNumber}`, 10, y); y += 7;
+    doc.text(
+      `GPS: ${gps ? `${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)}` : 'Not captured'}`,
+      10, y
+    ); y += 7;
+    doc.text(`Started: ${new Date(startedAt).toLocaleString()}`, 10, y); y += 7;
+    doc.text(`Items scanned: ${items.length}`, 10, y); y += 12;
+
+    if (items.length === 0) {
+      doc.text('No items scanned yet in this session.', 10, y);
+    } else {
+      items.forEach((item, index) => {
+        if (y > 250) {
+          doc.addPage();
+          y = 15;
+        }
+
+        doc.setFontSize(13);
+        doc.text(`Item ${index + 1}`, 10, y);
+        y += 8;
+
+        doc.setFontSize(10);
+        doc.text(
+          `Compliance status: ${item.checkResult ? 'Reviewed' : 'Compliance check pending (Rule Engine not yet integrated)'
+          }`,
+          10, y
+        );
+        y += 6;
+
+        // Embed photo thumbnails, up to 3 per row, 30x30mm each
+        let x = 10;
+        item.photos.forEach((photo, i) => {
+          if (x > 150) {
+            x = 10;
+            y += 35;
+          }
+          try {
+            doc.addImage(photo, 'JPEG', x, y, 30, 30);
+          } catch (e) {
+            // If a given image fails to embed, skip it rather than break the whole export
+          }
+          x += 35;
+        });
+        y += 40;
+      });
+    }
+
+    doc.save(`visit-${visitNumber}-report.pdf`);
+  }
+
   const { visitNumber, shopNumber, gps, startedAt, items } = session;
 
   return (
     <div style={{ padding: '2rem', maxWidth: 600, margin: '0 auto' }}>
       <h1>Consolidated Visit Report</h1>
+
+      <button onClick={exportPDF} style={{ marginBottom: '1rem' }}>
+        Export PDF
+      </button>
 
       <section style={{ marginBottom: '1.5rem' }}>
         <p><strong>Visit Number:</strong> {visitNumber}</p>
