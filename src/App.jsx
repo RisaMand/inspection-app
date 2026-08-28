@@ -32,7 +32,7 @@ export default function App() {
           <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><Capture addItem={addItem} /></ProtectedRoute>
         } />
         <Route path="/item-result" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><ItemResult /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><ItemResult session={session} /></ProtectedRoute>
         } />
         <Route path="/seizure-memo" element={
           <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><SeizureMemoReview /></ProtectedRoute>
