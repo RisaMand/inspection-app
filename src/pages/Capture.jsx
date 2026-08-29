@@ -4,6 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { dbPromise } from '../db/db';
 
 const DRAFT_PHOTOS_KEY = 'captureDraftPhotos';
+const PHOTO_WARN_THRESHOLD = 4;
+const PHOTO_HARD_LIMIT = 7;
+const ITEM_WARN_THRESHOLD = 30;
 
 export default function Capture({ addItem, session, sessionLoaded }) {
   const videoRef = useRef(null);
@@ -65,9 +68,33 @@ export default function Capture({ addItem, session, sessionLoaded }) {
     saveDraftPhotos();
   }, [photos]);
 
+  function tryAddPhoto(dataUrl, currentPhotos, setPhotosFn, setRetakePromptFn) {
+    if (currentPhotos.length >= PHOTO_HARD_LIMIT) {
+      alert(`This item already has ${PHOTO_HARD_LIMIT} photos, which is the maximum. Finish this item or remove a photo before adding another.`);
+      return;
+    }
+
+    if (currentPhotos.length === PHOTO_WARN_THRESHOLD) {
+      const proceed = window.confirm(
+        `This item already has ${PHOTO_WARN_THRESHOLD} photos. Most items only need a few (front/back/supplementary panels). Add another anyway?`
+      );
+      if (!proceed) {
+        return;
+      }
+    }
+
+    setPhotosFn((prev) => [...prev, dataUrl]);
+    setRetakePromptFn(null);
+  }
+
   function capturePhoto() {
     if (!stream) {
       alert('Camera is not available. Use "Upload Photo" instead, or check camera permissions and reload.');
+      return;
+    }
+
+    if (photos.length >= PHOTO_HARD_LIMIT) {
+      alert(`This item already has ${PHOTO_HARD_LIMIT} photos, which is the maximum. Finish this item or remove a photo before adding another.`);
       return;
     }
 
@@ -81,8 +108,7 @@ export default function Capture({ addItem, session, sessionLoaded }) {
     const qualityResult = mockQualityCheck(dataUrl);
 
     if (qualityResult.pass) {
-      setPhotos((prev) => [...prev, dataUrl]);
-      setRetakePrompt(null);
+      tryAddPhoto(dataUrl, photos, setPhotos, setRetakePrompt);
     } else {
       setRetakePrompt({ reason: qualityResult.reason });
     }
@@ -92,14 +118,19 @@ export default function Capture({ addItem, session, sessionLoaded }) {
     const file = e.target.files[0];
     if (!file) return;
 
+    if (photos.length >= PHOTO_HARD_LIMIT) {
+      alert(`This item already has ${PHOTO_HARD_LIMIT} photos, which is the maximum. Finish this item or remove a photo before adding another.`);
+      e.target.value = '';
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result;
       const qualityResult = mockQualityCheck(dataUrl);
 
       if (qualityResult.pass) {
-        setPhotos((prev) => [...prev, dataUrl]);
-        setRetakePrompt(null);
+        tryAddPhoto(dataUrl, photos, setPhotos, setRetakePrompt);
       } else {
         setRetakePrompt({ reason: qualityResult.reason });
       }
@@ -124,6 +155,12 @@ export default function Capture({ addItem, session, sessionLoaded }) {
     const itemId = addItem(photos);
     setPhotos([]);
     dbPromise.then((db) => db.delete('session', DRAFT_PHOTOS_KEY));
+
+    const newItemCount = (session?.items?.length ?? 0) + 1;
+    if (newItemCount === ITEM_WARN_THRESHOLD) {
+      alert(`This session now has ${ITEM_WARN_THRESHOLD} items. Consider closing out this visit soon via the Consolidated Report screen.`);
+    }
+
     navigate(`/item-result/${itemId}`);
   }
 
