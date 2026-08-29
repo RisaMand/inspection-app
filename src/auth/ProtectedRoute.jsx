@@ -1,13 +1,21 @@
 import { Navigate } from 'react-router-dom';
 
-export default function ProtectedRoute({ isLoggedIn, authLoaded, children }) {
+export default function ProtectedRoute({ isLoggedIn, authLoaded, role, allowedRole, children }) {
   if (!authLoaded) {
-    // Still reading from IndexedDB — don't redirect yet, avoid a false
-    // bounce-to-Login flicker for someone who's actually logged in.
     return <p style={{ padding: '2rem' }}>Loading...</p>;
   }
   if (!isLoggedIn) {
     return <Navigate to="/" replace />;
+  }
+  if (allowedRole && role !== allowedRole) {
+    const homePath = role === 'inspector' ? '/session' : '/dashboard';
+    return (
+      <Navigate
+        to={homePath}
+        replace
+        state={{ notice: `This screen isn't available for the ${role} role.` }}
+      />
+    );
   }
   return children;
 }

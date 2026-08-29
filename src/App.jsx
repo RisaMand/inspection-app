@@ -21,39 +21,44 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <SyncStatus pendingCount={session?.items?.length ?? 0} />
+      {isLoggedIn && authLoaded && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 1rem' }}>
+          <SyncStatus pendingCount={session?.items?.length ?? 0} />
+          <button onClick={logout}>Log Out</button>
+        </div>
+      )}
       <Routes>
-        <Route path="/" element={<Login login={login} />} />
+        <Route path="/" element={<Login login={login} isLoggedIn={isLoggedIn} authLoaded={authLoaded} currentRole={role} />} />
 
         <Route path="/session" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><StartSession startSession={startSession} session={session} /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="inspector"><StartSession startSession={startSession} session={session} /></ProtectedRoute>
         } />
         <Route path="/capture" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><Capture addItem={addItem} session={session} sessionLoaded={sessionLoaded} /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="inspector"><Capture addItem={addItem} session={session} sessionLoaded={sessionLoaded} /></ProtectedRoute>
         } />
         <Route path="/item-result/:id" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><ItemResult session={session} /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="inspector"><ItemResult session={session} /></ProtectedRoute>
         } />
         <Route path="/seizure-memo" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><SeizureMemoReview /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="inspector"><SeizureMemoReview /></ProtectedRoute>
         } />
         <Route path="/consolidated-report" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><ConsolidatedReport session={session} endSession={endSession} /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="inspector"><ConsolidatedReport session={session} endSession={endSession} /></ProtectedRoute>
         } />
         <Route path="/dashboard" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><DashboardHome /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="official"><DashboardHome /></ProtectedRoute>
         } />
         <Route path="/dashboard/filter" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><FilterDrilldown /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="official"><FilterDrilldown /></ProtectedRoute>
         } />
         <Route path="/dashboard/search" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><Search /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="official"><Search /></ProtectedRoute>
         } />
         <Route path="/dashboard/report/:id" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><ReportViewer /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="official"><ReportViewer /></ProtectedRoute>
         } />
         <Route path="/dashboard/officer" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><OfficerActivity /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="official"><OfficerActivity /></ProtectedRoute>
         } />
       </Routes>
     </BrowserRouter>
