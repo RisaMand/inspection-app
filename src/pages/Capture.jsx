@@ -41,31 +41,36 @@ export default function Capture({ addItem, session, sessionLoaded }) {
     }
   }, [session, sessionLoaded, navigate]);
   // Restore any in-progress (not-yet-finished) photos after a refresh.
-useEffect(() => {
-  async function loadDraftPhotos() {
-    const db = await dbPromise;
-    const stored = await db.get('session', DRAFT_PHOTOS_KEY);
-    if (stored && stored.length > 0) {
-      setPhotos(stored);
+  useEffect(() => {
+    async function loadDraftPhotos() {
+      const db = await dbPromise;
+      const stored = await db.get('session', DRAFT_PHOTOS_KEY);
+      if (stored && stored.length > 0) {
+        setPhotos(stored);
+      }
     }
-  }
-  loadDraftPhotos();
-}, []);
+    loadDraftPhotos();
+  }, []);
 
-// Persist in-progress photos on every change, so a refresh doesn't lose them.
-useEffect(() => {
-  async function saveDraftPhotos() {
-    const db = await dbPromise;
-    if (photos.length > 0) {
-      await db.put('session', photos, DRAFT_PHOTOS_KEY);
-    } else {
-      await db.delete('session', DRAFT_PHOTOS_KEY);
+  // Persist in-progress photos on every change, so a refresh doesn't lose them.
+  useEffect(() => {
+    async function saveDraftPhotos() {
+      const db = await dbPromise;
+      if (photos.length > 0) {
+        await db.put('session', photos, DRAFT_PHOTOS_KEY);
+      } else {
+        await db.delete('session', DRAFT_PHOTOS_KEY);
+      }
     }
-  }
-  saveDraftPhotos();
-}, [photos]);
+    saveDraftPhotos();
+  }, [photos]);
 
   function capturePhoto() {
+    if (!stream) {
+      alert('Camera is not available. Use "Upload Photo" instead, or check camera permissions and reload.');
+      return;
+    }
+
     const video = videoRef.current;
     const canvas = canvasRef.current;
     canvas.width = video.videoWidth;
@@ -112,15 +117,15 @@ useEffect(() => {
   }
 
   function finishItem() {
-  if (photos.length === 0) {
-    alert('Capture at least one photo before finishing this item.');
-    return;
+    if (photos.length === 0) {
+      alert('Capture at least one photo before finishing this item.');
+      return;
+    }
+    const itemId = addItem(photos);
+    setPhotos([]);
+    dbPromise.then((db) => db.delete('session', DRAFT_PHOTOS_KEY));
+    navigate(`/item-result/${itemId}`);
   }
-  const itemId = addItem(photos);
-  setPhotos([]);
-  dbPromise.then((db) => db.delete('session', DRAFT_PHOTOS_KEY));
-  navigate(`/item-result/${itemId}`);
-}
 
   return (
     <div style={{ padding: '2rem', maxWidth: 500, margin: '0 auto' }}>
@@ -128,7 +133,7 @@ useEffect(() => {
       {error && <p style={{ color: 'red' }}>{error}</p>}
       <video ref={videoRef} autoPlay playsInline style={{ width: '100%', background: '#000' }} />
       <canvas ref={canvasRef} style={{ display: 'none' }} />
-      <button onClick={capturePhoto} style={{ marginTop: '1rem' }}>
+      <button onClick={capturePhoto} disabled={!stream} style={{ marginTop: '1rem' }}>
         Capture Photo
       </button>
       <label style={{ marginLeft: '0.5rem', cursor: 'pointer' }}>
