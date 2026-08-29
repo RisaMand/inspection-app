@@ -34,6 +34,7 @@ export default function StartSession({ startSession, session }) {
         `You have an active session with ${session.items.length} item(s) not yet closed out. Starting a new session will discard them. Continue?`
       );
       if (!confirmed) {
+        navigate('/consolidated-report');
         return;
       }
     }
