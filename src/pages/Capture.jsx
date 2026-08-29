@@ -1,8 +1,11 @@
 import { useRef, useState, useEffect } from 'react';
 import { mockQualityCheck } from '../cv/mockQualityCheck';
 import { useNavigate } from 'react-router-dom';
+import { dbPromise } from '../db/db';
 
-export default function Capture({ addItem }) {
+const DRAFT_PHOTOS_KEY = 'captureDraftPhotos';
+
+export default function Capture({ addItem, session, sessionLoaded }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [stream, setStream] = useState(null);
@@ -32,6 +35,35 @@ export default function Capture({ addItem }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useEffect(() => {
+    if (sessionLoaded && !session) {
+      navigate('/session');
+    }
+  }, [session, sessionLoaded, navigate]);
+  // Restore any in-progress (not-yet-finished) photos after a refresh.
+useEffect(() => {
+  async function loadDraftPhotos() {
+    const db = await dbPromise;
+    const stored = await db.get('session', DRAFT_PHOTOS_KEY);
+    if (stored && stored.length > 0) {
+      setPhotos(stored);
+    }
+  }
+  loadDraftPhotos();
+}, []);
+
+// Persist in-progress photos on every change, so a refresh doesn't lose them.
+useEffect(() => {
+  async function saveDraftPhotos() {
+    const db = await dbPromise;
+    if (photos.length > 0) {
+      await db.put('session', photos, DRAFT_PHOTOS_KEY);
+    } else {
+      await db.delete('session', DRAFT_PHOTOS_KEY);
+    }
+  }
+  saveDraftPhotos();
+}, [photos]);
 
   function capturePhoto() {
     const video = videoRef.current;
@@ -80,14 +112,15 @@ export default function Capture({ addItem }) {
   }
 
   function finishItem() {
-    if (photos.length === 0) {
-      alert('Capture at least one photo before finishing this item.');
-      return;
-    }
-    const itemId = addItem(photos);
-    setPhotos([]);
-    navigate(`/item-result/${itemId}`);
+  if (photos.length === 0) {
+    alert('Capture at least one photo before finishing this item.');
+    return;
   }
+  const itemId = addItem(photos);
+  setPhotos([]);
+  dbPromise.then((db) => db.delete('session', DRAFT_PHOTOS_KEY));
+  navigate(`/item-result/${itemId}`);
+}
 
   return (
     <div style={{ padding: '2rem', maxWidth: 500, margin: '0 auto' }}>

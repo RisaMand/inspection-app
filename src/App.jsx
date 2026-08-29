@@ -17,7 +17,7 @@ import OfficerActivity from './pages/OfficerActivity';
 
 export default function App() {
   const { isLoggedIn, role, login, logout, authLoaded } = useAuth();
-  const { session, startSession, addItem, endSession } = useSession();
+  const { session, sessionLoaded, startSession, addItem, endSession } = useSession();
 
   return (
     <BrowserRouter>
@@ -29,7 +29,7 @@ export default function App() {
           <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><StartSession startSession={startSession} /></ProtectedRoute>
         } />
         <Route path="/capture" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><Capture addItem={addItem} /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><Capture addItem={addItem} session={session} sessionLoaded={sessionLoaded} /></ProtectedRoute>
         } />
         <Route path="/item-result/:id" element={
           <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><ItemResult session={session} /></ProtectedRoute>
