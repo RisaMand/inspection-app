@@ -38,12 +38,24 @@ export default function StartSession({ startSession, session }) {
       }
     }
 
-    const finalGps =
-      gpsStatus === 'granted'
-        ? gps
-        : manualLat && manualLng
-          ? { lat: parseFloat(manualLat), lng: parseFloat(manualLng) }
-          : null;
+    let finalGps = null;
+
+    if (gpsStatus === 'granted') {
+      finalGps = gps;
+    } else if (manualLat.trim() !== '' || manualLng.trim() !== '') {
+      const parsedLat = parseFloat(manualLat);
+      const parsedLng = parseFloat(manualLng);
+
+      const validLat = !isNaN(parsedLat) && parsedLat >= -90 && parsedLat <= 90;
+      const validLng = !isNaN(parsedLng) && parsedLng >= -180 && parsedLng <= 180;
+
+      if (!validLat || !validLng) {
+        alert('Enter a valid latitude (-90 to 90) and longitude (-180 to 180), or leave both blank to submit without GPS.');
+        return;
+      }
+
+      finalGps = { lat: parsedLat, lng: parsedLng };
+    }
 
     startSession(visitNumber, shopNumber, finalGps);
     navigate('/capture');
@@ -89,15 +101,21 @@ export default function StartSession({ startSession, session }) {
             <div>
               <p>⚠️ Location permission denied. Enter manually:</p>
               <input
-                type="text"
-                placeholder="Latitude"
+                type="number"
+                step="any"
+                min="-90"
+                max="90"
+                placeholder="Latitude (-90 to 90)"
                 value={manualLat}
                 onChange={(e) => setManualLat(e.target.value)}
                 style={{ display: 'block', width: '100%', marginBottom: '0.5rem' }}
               />
               <input
-                type="text"
-                placeholder="Longitude"
+                type="number"
+                step="any"
+                min="-180"
+                max="180"
+                placeholder="Longitude (-180 to 180)"
                 value={manualLng}
                 onChange={(e) => setManualLng(e.target.value)}
                 style={{ display: 'block', width: '100%' }}
