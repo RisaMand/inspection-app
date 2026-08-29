@@ -26,7 +26,7 @@ export default function App() {
         <Route path="/" element={<Login login={login} />} />
 
         <Route path="/session" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><StartSession startSession={startSession} /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><StartSession startSession={startSession} session={session} /></ProtectedRoute>
         } />
         <Route path="/capture" element={
           <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded}><Capture addItem={addItem} session={session} sessionLoaded={sessionLoaded} /></ProtectedRoute>

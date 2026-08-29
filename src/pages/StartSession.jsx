@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-export default function StartSession({ startSession }) {
+export default function StartSession({ startSession, session }) {
   const [visitNumber, setVisitNumber] = useState('');
   const [shopNumber, setShopNumber] = useState('');
   const [gpsStatus, setGpsStatus] = useState('pending'); // pending | granted | denied | unavailable
@@ -28,12 +28,22 @@ export default function StartSession({ startSession }) {
 
   function handleSubmit(e) {
     e.preventDefault();
+
+    if (session && session.items && session.items.length > 0) {
+      const confirmed = window.confirm(
+        `You have an active session with ${session.items.length} item(s) not yet closed out. Starting a new session will discard them. Continue?`
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
     const finalGps =
       gpsStatus === 'granted'
         ? gps
         : manualLat && manualLng
-        ? { lat: parseFloat(manualLat), lng: parseFloat(manualLng) }
-        : null;
+          ? { lat: parseFloat(manualLat), lng: parseFloat(manualLng) }
+          : null;
 
     startSession(visitNumber, shopNumber, finalGps);
     navigate('/capture');
