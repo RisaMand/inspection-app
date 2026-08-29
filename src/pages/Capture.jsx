@@ -154,14 +154,32 @@ export default function Capture({ addItem, session, sessionLoaded }) {
 
     const reader = new FileReader();
     reader.onload = () => {
-      const dataUrl = reader.result;
-      const qualityResult = mockQualityCheck(dataUrl);
+      const rawDataUrl = reader.result;
 
-      if (qualityResult.pass) {
-        tryAddPhoto(dataUrl, photos, setPhotos, setRetakePrompt);
-      } else {
-        setRetakePrompt({ reason: qualityResult.reason });
-      }
+      // Normalize whatever format was picked (PNG, WEBP, GIF, HEIC, etc.)
+      // into a real JPEG, the same format the camera path always produces.
+      // This is what every downstream step (quality-check, PDF, DOCX
+      // export) already expects — the inspector never sees a format name.
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        const normalizedDataUrl = canvas.toDataURL('image/jpeg');
+
+        const qualityResult = mockQualityCheck(normalizedDataUrl);
+
+        if (qualityResult.pass) {
+          tryAddPhoto(normalizedDataUrl, photos, setPhotos, setRetakePrompt);
+        } else {
+          setRetakePrompt({ reason: qualityResult.reason });
+        }
+      };
+      img.onerror = () => {
+        alert('Couldn\'t read this photo — it may be in an unsupported format. Try a different photo.');
+      };
+      img.src = rawDataUrl;
     };
     reader.readAsDataURL(file);
     e.target.value = ''; // reset so the same file can be re-selected if needed
