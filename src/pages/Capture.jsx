@@ -3,10 +3,14 @@ import { mockQualityCheck } from '../cv/mockQualityCheck';
 import { useNavigate } from 'react-router-dom';
 import { dbPromise } from '../db/db';
 
-const DRAFT_PHOTOS_KEY = 'captureDraftPhotos';
 const PHOTO_WARN_THRESHOLD = 4;
 const PHOTO_HARD_LIMIT = 7;
 const ITEM_WARN_THRESHOLD = 30;
+
+function getDraftPhotosKey(session) {
+  if (!session || !session.startedAt) return null;
+  return `captureDraftPhotos:${session.startedAt}`;
+}
 
 export default function Capture({ addItem, session, sessionLoaded }) {
   const videoRef = useRef(null);
@@ -57,30 +61,40 @@ export default function Capture({ addItem, session, sessionLoaded }) {
       navigate('/session');
     }
   }, [session, sessionLoaded, navigate]);
-  // Restore any in-progress (not-yet-finished) photos after a refresh.
+
+  // Restore any in-progress (not-yet-finished) photos after a refresh,
+  // scoped to the currently active session — never leaks a previous
+  // session's abandoned draft photos into a new one.
   useEffect(() => {
+    const draftKey = getDraftPhotosKey(session);
+    if (!draftKey) return; // no active session yet, nothing to restore against
+
     async function loadDraftPhotos() {
       const db = await dbPromise;
-      const stored = await db.get('session', DRAFT_PHOTOS_KEY);
+      const stored = await db.get('session', draftKey);
       if (stored && stored.length > 0) {
         setPhotos(stored);
       }
     }
     loadDraftPhotos();
-  }, []);
+  }, [session]);
 
-  // Persist in-progress photos on every change, so a refresh doesn't lose them.
+  // Persist in-progress photos on every change, so a refresh doesn't lose
+  // them — scoped to the same per-session key as the load effect.
   useEffect(() => {
+    const draftKey = getDraftPhotosKey(session);
+    if (!draftKey) return;
+
     async function saveDraftPhotos() {
       const db = await dbPromise;
       if (photos.length > 0) {
-        await db.put('session', photos, DRAFT_PHOTOS_KEY);
+        await db.put('session', photos, draftKey);
       } else {
-        await db.delete('session', DRAFT_PHOTOS_KEY);
+        await db.delete('session', draftKey);
       }
     }
     saveDraftPhotos();
-  }, [photos]);
+  }, [photos, session]);
 
   function tryAddPhoto(dataUrl, currentPhotos, setPhotosFn, setRetakePromptFn) {
     if (currentPhotos.length >= PHOTO_HARD_LIMIT) {
@@ -168,7 +182,10 @@ export default function Capture({ addItem, session, sessionLoaded }) {
     }
     const itemId = addItem(photos);
     setPhotos([]);
-    dbPromise.then((db) => db.delete('session', DRAFT_PHOTOS_KEY));
+    const draftKey = getDraftPhotosKey(session);
+    if (draftKey) {
+      dbPromise.then((db) => db.delete('session', draftKey));
+    }
 
     const newItemCount = (session?.items?.length ?? 0) + 1;
     if (newItemCount === ITEM_WARN_THRESHOLD) {
