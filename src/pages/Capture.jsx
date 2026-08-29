@@ -11,6 +11,7 @@ const ITEM_WARN_THRESHOLD = 30;
 export default function Capture({ addItem, session, sessionLoaded }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const streamRef = useRef(null);
   const [stream, setStream] = useState(null);
   const [error, setError] = useState('');
   const [photos, setPhotos] = useState([]); // array of dataUrl strings
@@ -18,26 +19,39 @@ export default function Capture({ addItem, session, sessionLoaded }) {
   const navigate = useNavigate();
 
   useEffect(() => {
+    let cancelled = false;
+
     async function startCamera() {
       try {
         const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+
+        if (cancelled) {
+          mediaStream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        streamRef.current = mediaStream;
         setStream(mediaStream);
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
         }
       } catch (err) {
-        setError('Camera access failed: ' + err.message);
+        if (!cancelled) {
+          setError('Camera access failed: ' + err.message);
+        }
       }
     }
     startCamera();
 
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
+      cancelled = true;
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
   useEffect(() => {
     if (sessionLoaded && !session) {
       navigate('/session');
