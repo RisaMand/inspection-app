@@ -12,6 +12,48 @@ function getDraftPhotosKey(session) {
   return `captureDraftPhotos:${session.startedAt}`;
 }
 
+async function normalizeUploadedImage(file) {
+  // Preferred path: createImageBitmap with imageOrientation:'from-image'
+  // decodes the file AND applies whatever EXIF orientation tag it carries
+  // — covers all 8 possible orientation values correctly, natively, with
+  // no manual EXIF byte-parsing needed.
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      canvas.getContext('2d').drawImage(bitmap, 0, 0);
+      bitmap.close();
+      return canvas.toDataURL('image/jpeg');
+    } catch (err) {
+      // Fall through to the basic path below.
+    }
+  }
+
+  // Fallback for browsers without createImageBitmap/imageOrientation
+  // support: decode via <img>, same technique the app used before this
+  // fix. Orientation won't be corrected here, but this is no worse than
+  // the app's prior behavior — never a regression, just not the fix.
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/jpeg'));
+      };
+      img.onerror = () => reject(new Error('Image failed to decode'));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error('File failed to read'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function Capture({ addItem, session, sessionLoaded }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -171,7 +213,7 @@ export default function Capture({ addItem, session, sessionLoaded }) {
     }
   }
 
-  function handleFileUpload(e) {
+  async function handleFileUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -181,36 +223,22 @@ export default function Capture({ addItem, session, sessionLoaded }) {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const rawDataUrl = reader.result;
+    // Normalize whatever format was picked (PNG, WEBP, GIF, HEIC, etc.)
+    // into a real, correctly-oriented JPEG — same format the camera path
+    // always produces, with EXIF rotation already applied.
+    try {
+      const normalizedDataUrl = await normalizeUploadedImage(file);
+      const qualityResult = mockQualityCheck(normalizedDataUrl);
 
-      // Normalize whatever format was picked (PNG, WEBP, GIF, HEIC, etc.)
-      // into a real JPEG, the same format the camera path always produces.
-      // This is what every downstream step (quality-check, PDF, DOCX
-      // export) already expects — the inspector never sees a format name.
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        canvas.getContext('2d').drawImage(img, 0, 0);
-        const normalizedDataUrl = canvas.toDataURL('image/jpeg');
+      if (qualityResult.pass) {
+        tryAddPhoto(normalizedDataUrl, setPhotos, setRetakePrompt);
+      } else {
+        setRetakePrompt({ reason: qualityResult.reason });
+      }
+    } catch (err) {
+      alert('Couldn\'t read this photo — it may be in an unsupported format. Try a different photo.');
+    }
 
-        const qualityResult = mockQualityCheck(normalizedDataUrl);
-
-        if (qualityResult.pass) {
-          tryAddPhoto(normalizedDataUrl, setPhotos, setRetakePrompt);
-        } else {
-          setRetakePrompt({ reason: qualityResult.reason });
-        }
-      };
-      img.onerror = () => {
-        alert('Couldn\'t read this photo — it may be in an unsupported format. Try a different photo.');
-      };
-      img.src = rawDataUrl;
-    };
-    reader.readAsDataURL(file);
     e.target.value = ''; // reset so the same file can be re-selected if needed
   }
 
