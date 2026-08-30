@@ -33,6 +33,8 @@ export default function Capture({ addItem, session, sessionLoaded }) {
         // inspection tool, an inspector photographs a label in front of
         // them, not themselves. 'exact' forces a hard requirement, which
         // throws on devices with only one camera (e.g. most laptops).
+        // VERIFIED on real device (Android phone, Vercel HTTPS deploy,
+        // installed as PWA): rear camera opens correctly.
         mediaStream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { exact: 'environment' } },
         });
