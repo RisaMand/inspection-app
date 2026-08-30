@@ -26,23 +26,40 @@ export default function Capture({ addItem, session, sessionLoaded }) {
     let cancelled = false;
 
     async function startCamera() {
-      try {
-        const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      let mediaStream;
 
-        if (cancelled) {
-          mediaStream.getTracks().forEach((track) => track.stop());
+      try {
+        // Prefer the rear/environment-facing camera — this is a field
+        // inspection tool, an inspector photographs a label in front of
+        // them, not themselves. 'exact' forces a hard requirement, which
+        // throws on devices with only one camera (e.g. most laptops).
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: 'environment' } },
+        });
+      } catch (exactErr) {
+        try {
+          // Fallback: no rear camera available under a strict match (single-
+          // camera device, or the constraint isn't supported) — fall back to
+          // whatever camera the device/browser offers rather than failing
+          // outright.
+          mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        } catch (fallbackErr) {
+          if (!cancelled) {
+            setError('Camera access failed: ' + fallbackErr.message);
+          }
           return;
         }
+      }
 
-        streamRef.current = mediaStream;
-        setStream(mediaStream);
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError('Camera access failed: ' + err.message);
-        }
+      if (cancelled) {
+        mediaStream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
+      streamRef.current = mediaStream;
+      setStream(mediaStream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
       }
     }
     startCamera();
