@@ -31,7 +31,7 @@ export default function StartSession({ startSession, session }) {
 
     if (session && session.items && session.items.length > 0) {
       const confirmed = window.confirm(
-        `You have an active session with ${session.items.length} item(s) not yet closed out. Starting a new session will discard them. Continue?`
+        `You have an active session with ${session.items.length} item(s) not yet closed out. Starting a new session will close out and archive it — you'll still be able to find it in your session history. Continue?`
       );
       if (!confirmed) {
         navigate('/consolidated-report');
