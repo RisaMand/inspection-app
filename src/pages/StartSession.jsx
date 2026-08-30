@@ -26,7 +26,7 @@ export default function StartSession({ startSession, session }) {
     );
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
 
     if (session && session.items && session.items.length > 0) {
@@ -58,7 +58,7 @@ export default function StartSession({ startSession, session }) {
       finalGps = { lat: parsedLat, lng: parsedLng };
     }
 
-    startSession(visitNumber, shopNumber, finalGps);
+    await startSession(visitNumber, shopNumber, finalGps);
     navigate('/capture');
   }
 

@@ -40,6 +40,20 @@ export function useSession(userId) {
   async function startSession(visitNumber, shopNumber, gps) {
     if (!userId) return; // no logged-in user to attribute this session to
 
+    const db = await dbPromise;
+
+    // If this user already has an active session (e.g. they explicitly
+    // chose to override the warning in StartSession.jsx), archive it
+    // first — never leave two sessions simultaneously active for the same
+    // user, since that makes which one is "current" ambiguous.
+    if (session) {
+      const archivedPrevious = { ...session, endedAt: new Date().toISOString() };
+      await db.put('sessions', archivedPrevious);
+      setAllSessions((prev) =>
+        prev.map((s) => (s.id === archivedPrevious.id ? archivedPrevious : s))
+      );
+    }
+
     const newSession = {
       id: crypto.randomUUID(),
       createdBy: userId,
@@ -51,7 +65,6 @@ export function useSession(userId) {
       items: [],
     };
 
-    const db = await dbPromise;
     await db.put('sessions', newSession);
     setAllSessions((prev) => [...prev, newSession]);
   }

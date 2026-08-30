@@ -250,12 +250,12 @@ export default function Capture({ addItem, session, sessionLoaded }) {
     alert('Barcode scanning not yet implemented — pending Person 3 (CV) integration.');
   }
 
-  function finishItem() {
+  async function finishItem() {
     if (photosRef.current.length === 0) {
       alert('Capture at least one photo before finishing this item.');
       return;
     }
-    const itemId = addItem(photos);
+    const itemId = await addItem(photos);
     setPhotos([]);
     const draftKey = getDraftPhotosKey(session);
     if (draftKey) {
