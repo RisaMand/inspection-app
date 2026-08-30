@@ -16,11 +16,19 @@ export default function Capture({ addItem, session, sessionLoaded }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
+  const photosRef = useRef([]);
   const [stream, setStream] = useState(null);
   const [error, setError] = useState('');
   const [photos, setPhotos] = useState([]); // array of dataUrl strings
   const [retakePrompt, setRetakePrompt] = useState(null); // { reason } or null
   const navigate = useNavigate();
+
+  // Keep a ref mirror of `photos` so async callbacks (file upload) can check
+  // the true, current count instead of a stale value captured in a closure
+  // from before they started.
+  useEffect(() => {
+    photosRef.current = photos;
+  }, [photos]);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,7 +114,7 @@ export default function Capture({ addItem, session, sessionLoaded }) {
 
     async function saveDraftPhotos() {
       const db = await dbPromise;
-      if (photos.length > 0) {
+      if (photosRef.current.length > 0) {
         await db.put('session', photos, draftKey);
       } else {
         await db.delete('session', draftKey);
@@ -115,13 +123,15 @@ export default function Capture({ addItem, session, sessionLoaded }) {
     saveDraftPhotos();
   }, [photos, session]);
 
-  function tryAddPhoto(dataUrl, currentPhotos, setPhotosFn, setRetakePromptFn) {
-    if (currentPhotos.length >= PHOTO_HARD_LIMIT) {
+  function tryAddPhoto(dataUrl, setPhotosFn, setRetakePromptFn) {
+    const currentCount = photosRef.current.length;
+
+    if (currentCount >= PHOTO_HARD_LIMIT) {
       alert(`This item already has ${PHOTO_HARD_LIMIT} photos, which is the maximum. Finish this item or remove a photo before adding another.`);
       return;
     }
 
-    if (currentPhotos.length === PHOTO_WARN_THRESHOLD) {
+    if (currentCount === PHOTO_WARN_THRESHOLD) {
       const proceed = window.confirm(
         `This item already has ${PHOTO_WARN_THRESHOLD} photos. Most items only need a few (front/back/supplementary panels). Add another anyway?`
       );
@@ -140,7 +150,7 @@ export default function Capture({ addItem, session, sessionLoaded }) {
       return;
     }
 
-    if (photos.length >= PHOTO_HARD_LIMIT) {
+    if (photosRef.current.length >= PHOTO_HARD_LIMIT) {
       alert(`This item already has ${PHOTO_HARD_LIMIT} photos, which is the maximum. Finish this item or remove a photo before adding another.`);
       return;
     }
@@ -155,7 +165,7 @@ export default function Capture({ addItem, session, sessionLoaded }) {
     const qualityResult = mockQualityCheck(dataUrl);
 
     if (qualityResult.pass) {
-      tryAddPhoto(dataUrl, photos, setPhotos, setRetakePrompt);
+      tryAddPhoto(dataUrl, setPhotos, setRetakePrompt);
     } else {
       setRetakePrompt({ reason: qualityResult.reason });
     }
@@ -165,7 +175,7 @@ export default function Capture({ addItem, session, sessionLoaded }) {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (photos.length >= PHOTO_HARD_LIMIT) {
+    if (photosRef.current.length >= PHOTO_HARD_LIMIT) {
       alert(`This item already has ${PHOTO_HARD_LIMIT} photos, which is the maximum. Finish this item or remove a photo before adding another.`);
       e.target.value = '';
       return;
@@ -190,7 +200,7 @@ export default function Capture({ addItem, session, sessionLoaded }) {
         const qualityResult = mockQualityCheck(normalizedDataUrl);
 
         if (qualityResult.pass) {
-          tryAddPhoto(normalizedDataUrl, photos, setPhotos, setRetakePrompt);
+          tryAddPhoto(normalizedDataUrl, setPhotos, setRetakePrompt);
         } else {
           setRetakePrompt({ reason: qualityResult.reason });
         }
@@ -213,7 +223,7 @@ export default function Capture({ addItem, session, sessionLoaded }) {
   }
 
   function finishItem() {
-    if (photos.length === 0) {
+    if (photosRef.current.length === 0) {
       alert('Capture at least one photo before finishing this item.');
       return;
     }
