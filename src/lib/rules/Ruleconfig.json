@@ -1,0 +1,111 @@
+{
+  "version": "1.0.0",
+  "rules": [
+    {
+      "rule_id": "MANUFACTURER_ADDRESS_PRESENCE",
+      "description": "Manufacturer/required responsible party name and address must be declared",
+      "clause_citation": "Rule 6(1)(a)",
+      "field": "MANUFACTURER_ADDRESS",
+      "check_type": "presence",
+      "severity": "substantive",
+      "effective_from": "2011-06-01",
+      "effective_to": null
+    },
+    {
+      "rule_id": "COMMODITY_NAME_PRESENCE",
+      "description": "Common or generic name of the commodity must be declared",
+      "clause_citation": "Rule 6(1)(b)",
+      "field": "COMMODITY_NAME",
+      "check_type": "presence",
+      "severity": "substantive",
+      "effective_from": "2011-06-01",
+      "effective_to": null
+    },
+    {
+      "rule_id": "NET_QUANTITY_PRESENCE",
+      "description": "Net quantity must be declared",
+      "clause_citation": "Rule 6(1)(c)",
+      "field": "NET_QUANTITY",
+      "check_type": "presence",
+      "severity": "substantive",
+      "effective_from": "2011-06-01",
+      "effective_to": null
+    },
+    {
+      "rule_id": "MANUFACTURE_DATE_PRESENCE",
+      "description": "Applicable month and year of manufacture/pre-packing/import must be declared",
+      "clause_citation": "Rule 6(1)(d)",
+      "field": "MANUFACTURE_DATE",
+      "check_type": "presence",
+      "severity": "substantive",
+      "effective_from": "2011-06-01",
+      "effective_to": null
+    },
+    {
+      "rule_id": "MRP_PRESENCE",
+      "description": "Retail sale price must be declared on the package",
+      "clause_citation": "Rule 6(1)(e)",
+      "field": "MRP",
+      "check_type": "presence",
+      "severity": "substantive",
+      "effective_from": "2011-06-01",
+      "effective_to": null
+    },
+    {
+      "rule_id": "CONSUMER_CARE_PRESENCE",
+      "description": "Consumer complaint contact information must be declared",
+      "clause_citation": "Rule 6(1)(f)",
+      "field": "CONSUMER_CARE",
+      "check_type": "presence",
+      "severity": "substantive",
+      "effective_from": "2011-06-01",
+      "effective_to": null
+    },
+    {
+      "rule_id": "COUNTRY_OF_ORIGIN",
+      "description": "Country of origin must be declared for imported packages",
+      "clause_citation": "Rule 6(1)(f)",
+      "field": "COUNTRY_OF_ORIGIN",
+      "check_type": "conditional_presence",
+      "condition": "imported_product",
+      "severity": "substantive",
+      "effective_from": "2011-06-01",
+      "effective_to": null
+    },
+
+    {
+    "rule_id": "MRP_FORMAT",
+    "description": "Declared retail sale price must follow the prescribed MRP format",
+    "clause_citation": "Rule 6(1)(e)",
+    "field": "MRP",
+    "check_type": "format",
+    "format_type": "MRP",
+    "severity": "substantive",
+    "effective_from": "2011-06-01",
+    "effective_to": null
+    },
+
+    {
+      "rule_id": "DECLARATION_FONT_SIZE",
+      "description": "Mandatory declarations must satisfy the prescribed minimum character height",
+      "clause_citation": "Rule 7",
+      "field": "DECLARATIONS",
+      "check_type": "font_size",
+      "minimum_mm": 1,
+      "severity": "cosmetic",
+      "effective_from": "2011-06-01",
+      "effective_to": null
+    },
+    {
+      "rule_id": "DECLARATION_PLACEMENT",
+      "description": "Required declarations must appear on the principal display panel",
+      "clause_citation": "Rule 8",
+      "field": "DECLARATIONS",
+      "check_type": "placement",
+      "expected_region": "principal_display_panel",
+      "severity": "cosmetic",
+      "effective_from": "2011-06-01",
+      "effective_to": null
+    }
+  ]
+}
