@@ -25,6 +25,47 @@ export const UPSCALE_FACTOR = 2;
  * @param {number} [options.c=10] - Adaptive threshold constant subtracted from the mean.
  * @returns {Promise<HTMLCanvasElement>} Binary (black on white) canvas.
  */
+
+async function toCanvasElement(source) {
+  if (source instanceof HTMLCanvasElement) {
+    return source;
+  }
+
+  return new Promise((resolve, reject) => {
+    let img;
+    if (source instanceof HTMLImageElement) {
+      img = source;
+    } else if (typeof source === 'string') {
+      const el = document.getElementById(source);
+      if (el instanceof HTMLCanvasElement) return resolve(el);
+      if (el instanceof HTMLImageElement) {
+        img = el;
+      } else {
+        img = new Image();
+        img.src = source;
+      }
+    } else {
+      return reject(new Error('Invalid image source type'));
+    }
+
+    const onComplete = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas);
+    };
+
+    if (img.complete && (img.naturalWidth || img.width)) {
+      onComplete();
+    } else {
+      img.onload = onComplete;
+      img.onerror = () => reject(new Error('Failed to load image for preprocessing'));
+    }
+  });
+}
+
 export async function preprocessForOCR(imageElementOrCanvas, options = {}) {
   const {
     upscaleMinSide = UPSCALE_MIN_SIDE,
@@ -46,7 +87,8 @@ export async function preprocessForOCR(imageElementOrCanvas, options = {}) {
   let clahe = null;
 
   try {
-    src = cvInstance.imread(imageElementOrCanvas);
+    const inputCanvas = await toCanvasElement(imageElementOrCanvas);
+    src = cvInstance.imread(inputCanvas);
 
     // Neighborhood scales with image size so large headline strokes on
     // high-res captures aren't hollowed out; an explicit blockSize wins.

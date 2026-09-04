@@ -190,7 +190,7 @@ export default function Capture({ addItem, session, sessionLoaded }) {
       ocrText: cvResult.ocrText,
       confidence: cvResult.confidence,
     });
-    setRetakePromptFn(null);
+    setRetakePrompt(null);
   }
 
   async function capturePhoto() {
