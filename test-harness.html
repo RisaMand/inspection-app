@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>checkImage() Test Harness</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1a2e; color: #e0e0e0; padding: 24px; }
+    h1 { color: #00d4ff; margin-bottom: 16px; }
+    .controls { margin-bottom: 20px; }
+    .controls button {
+      padding: 10px 20px; margin: 4px;
+      background: #0f3460; color: #e0e0e0; border: 1px solid #00d4ff;
+      border-radius: 6px; cursor: pointer; font-size: 14px;
+    }
+    .controls button:hover { background: #16213e; }
+    .controls button.active { background: #00d4ff; color: #1a1a2e; font-weight: bold; }
+    #status { margin: 12px 0; font-style: italic; color: #aaa; }
+    #preview { display: none; max-width: 480px; border: 2px solid #333; border-radius: 8px; margin: 12px 0; }
+    #output {
+      background: #0f0f23; border: 1px solid #333; border-radius: 8px;
+      padding: 16px; white-space: pre-wrap; font-family: 'Cascadia Code', monospace;
+      font-size: 13px; line-height: 1.5; max-height: 500px; overflow-y: auto;
+    }
+    .pass { color: #00ff88; } .fail { color: #ff4466; }
+  </style>
+</head>
+<body>
+  <h1>🧪 checkImage() Test Harness</h1>
+
+  <div class="controls">
+    <button onclick="testImage('src/lib/cv/test-photos/image1.png', this)">Image 1 (Chicken Label)</button>
+    <button onclick="testImage('src/lib/cv/test-photos/image2.png', this)">Image 2 (Everest Spice)</button>
+    <button onclick="testImage('src/lib/cv/test-photos/image3.png', this)">Image 3 (Aloo Bhujiya)</button>
+    <button onclick="testAll(this)">▶ Run All Three</button>
+  </div>
+
+  <div id="status">Ready. Click a button to test.</div>
+  <img id="preview" />
+  <pre id="output"></pre>
+
+  <script type="module">
+    // Dynamic import — works because this HTML will be served from the repo root
+    // via a simple dev server or Vite. Adjust path as needed.
+    //
+    // Since this repo has opencv.js (not @techstark/opencv-js) installed,
+    // and qualityCheck.js imports from '@techstark/opencv-js', the import
+    // will fail at runtime. This harness will catch and report that error.
+
+    let checkImage, qualityCheck, runOCR;
+
+    try {
+      const mod = await import('./src/lib/cv/index.js');
+      checkImage = mod.checkImage;
+      qualityCheck = mod.qualityCheck;
+      runOCR = mod.runOCR;
+      log('✅ Module loaded successfully.\n');
+    } catch (err) {
+      log(`❌ MODULE IMPORT FAILED:\n${err.message}\n\nThis is expected if @techstark/opencv-js is not installed.\nSee the verification report for details.\n`);
+    }
+
+    // Expose to onclick handlers
+    window.testImage = async function(src, btn) {
+      if (!checkImage) {
+        log('⛔ Cannot test — module failed to load. See error above.\n');
+        return;
+      }
+
+      document.querySelectorAll('.controls button').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+
+      const status = document.getElementById('status');
+      const preview = document.getElementById('preview');
+
+      status.textContent = `Loading ${src}...`;
+      preview.style.display = 'block';
+      preview.src = src;
+
+      await new Promise(resolve => { preview.onload = resolve; });
+
+      status.textContent = `Running checkImage() on ${src}...`;
+      const t0 = performance.now();
+
+      try {
+        const result = await checkImage(preview);
+        const elapsed = (performance.now() - t0).toFixed(1);
+
+        const passClass = result.qualityCheck.pass ? 'pass' : 'fail';
+        const passLabel = result.qualityCheck.pass ? 'PASS ✅' : 'FAIL ❌';
+
+        log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        log(`📷 ${src}`);
+        log(`⏱️  ${elapsed} ms`);
+        log(`\n📊 qualityCheck:`);
+        log(`   pass:      <span class="${passClass}">${passLabel}</span>`);
+        log(`   score:     ${result.qualityCheck.score.toFixed(2)}`);
+        log(`   threshold: ${result.qualityCheck.threshold}`);
+        log(`\n📝 OCR Result:`);
+        log(`   confidence: ${result.confidence}`);
+        log(`   ocrText:    ${result.ocrText === null ? '<null — skipped (blurry)>' : `"${result.ocrText.substring(0, 300)}${result.ocrText.length > 300 ? '...' : ''}"`}`);
+        log(`\n🔍 Full Return Object:`);
+        log(JSON.stringify(result, null, 2));
+        log('');
+
+        status.textContent = `Done — ${src} (${elapsed} ms)`;
+      } catch (err) {
+        log(`❌ ERROR on ${src}: ${err.message}\n${err.stack}\n`);
+        status.textContent = `Error on ${src}`;
+      }
+    };
+
+    window.testAll = async function(btn) {
+      document.getElementById('output').innerHTML = '';
+      log('🚀 Running all 3 test images sequentially...\n');
+      for (const src of ['src/lib/cv/test-photos/image1.png', 'src/lib/cv/test-photos/image2.png', 'src/lib/cv/test-photos/image3.png']) {
+        await window.testImage(src, null);
+      }
+      if (btn) btn.classList.add('active');
+      document.getElementById('status').textContent = 'All tests complete.';
+    };
+
+    function log(msg) {
+      document.getElementById('output').innerHTML += msg + '\n';
+      console.log(msg.replace(/<[^>]*>/g, ''));
+    }
+  </script>
+</body>
+</html>
