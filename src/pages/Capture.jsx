@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { mockQualityCheck } from '../cv/mockQualityCheck';
+import checkImage from '../lib/cv/index.js';
 import { useNavigate } from 'react-router-dom';
 import { dbPromise } from '../db/db';
 
@@ -59,10 +59,13 @@ export default function Capture({ addItem, session, sessionLoaded }) {
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const photosRef = useRef([]);
+  const ocrResultsRef = useRef([]);
+
   const [stream, setStream] = useState(null);
   const [error, setError] = useState('');
   const [photos, setPhotos] = useState([]); // array of dataUrl strings
   const [retakePrompt, setRetakePrompt] = useState(null); // { reason } or null
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const navigate = useNavigate();
 
   // Keep a ref mirror of `photos` so async callbacks (file upload) can check
@@ -165,7 +168,7 @@ export default function Capture({ addItem, session, sessionLoaded }) {
     saveDraftPhotos();
   }, [photos, session]);
 
-  function tryAddPhoto(dataUrl, setPhotosFn, setRetakePromptFn) {
+  function tryAddPhoto(dataUrl, cvResult) {
     const currentCount = photosRef.current.length;
 
     if (currentCount >= PHOTO_HARD_LIMIT) {
@@ -182,11 +185,15 @@ export default function Capture({ addItem, session, sessionLoaded }) {
       }
     }
 
-    setPhotosFn((prev) => [...prev, dataUrl]);
+    setPhotos((prev) => [...prev, dataUrl]);
+    ocrResultsRef.current.push({
+      ocrText: cvResult.ocrText,
+      confidence: cvResult.confidence,
+    });
     setRetakePromptFn(null);
   }
 
-  function capturePhoto() {
+  async function capturePhoto() {
     if (!stream) {
       alert('Camera is not available. Use "Upload Photo" instead, or check camera permissions and reload.');
       return;
@@ -204,12 +211,21 @@ export default function Capture({ addItem, session, sessionLoaded }) {
     canvas.getContext('2d').drawImage(video, 0, 0);
     const dataUrl = canvas.toDataURL('image/jpeg');
 
-    const qualityResult = mockQualityCheck(dataUrl);
+    setIsAnalyzing(true);
+    try {
+      const result = await checkImage(canvas);
 
-    if (qualityResult.pass) {
-      tryAddPhoto(dataUrl, setPhotos, setRetakePrompt);
-    } else {
-      setRetakePrompt({ reason: qualityResult.reason });
+      if (result.qualityCheck.pass) {
+        tryAddPhoto(dataUrl, result);
+      } else {
+        setRetakePrompt({
+          reason: `Image is too blurry (Quality score: ${Math.round(result.qualityCheck.score)} / required: ${result.qualityCheck.threshold}). Hold steady and try again.`,
+        });
+      }
+    } catch (err) {
+      alert('Error running computer vision check: ' + err.message);
+    } finally {
+      setIsAnalyzing(false);
     }
   }
 
@@ -228,22 +244,26 @@ export default function Capture({ addItem, session, sessionLoaded }) {
     // always produces, with EXIF rotation already applied.
     try {
       const normalizedDataUrl = await normalizeUploadedImage(file);
-      const qualityResult = mockQualityCheck(normalizedDataUrl);
+      const result = await checkImage(normalizedDataUrl);
 
-      if (qualityResult.pass) {
-        tryAddPhoto(normalizedDataUrl, setPhotos, setRetakePrompt);
+      if (result.qualityCheck.pass) {
+        tryAddPhoto(normalizedDataUrl, result);
       } else {
-        setRetakePrompt({ reason: qualityResult.reason });
+        setRetakePrompt({
+          reason: `Uploaded image is too blurry (Quality score: ${Math.round(result.qualityCheck.score)} / required: ${result.qualityCheck.threshold}). Please choose a clearer image.`,
+        });
       }
     } catch (err) {
-      alert('Couldn\'t read this photo — it may be in an unsupported format. Try a different photo.');
+      alert("Couldn't process this photo — verify format or try another image: " + err.message);
+    } finally {
+      setIsAnalyzing(false);
+      e.target.value = ''; // reset so the same file can be re-selected if needed
     }
-
-    e.target.value = ''; // reset so the same file can be re-selected if needed
   }
 
   function removePhoto(index) {
     setPhotos((prev) => prev.filter((_, i) => i !== index));
+    ocrResultsRef.current = ocrResultsRef.current.filter((_, i) => i !== index);
   }
 
   function triggerBarcodeStub() {
@@ -255,8 +275,20 @@ export default function Capture({ addItem, session, sessionLoaded }) {
       alert('Capture at least one photo before finishing this item.');
       return;
     }
-    const itemId = await addItem(photos);
+
+    // Combine OCR text from all captured photos for this item
+    const combinedOcrText = ocrResultsRef.current.map((r) => r.ocrText).filter(Boolean).join('\n');
+    const avgConfidence = ocrResultsRef.current.length > 0
+      ? ocrResultsRef.current.reduce((acc, cur) => acc + (cur.confidence || 0), 0) / ocrResultsRef.current.length
+      : 0;
+
+    const itemId = await addItem({
+      photos: photosRef.current,
+      ocrText: combinedOcrText,
+      confidence: avgConfidence,
+    });
     setPhotos([]);
+    ocrResultsRef.current = [];
     const draftKey = getDraftPhotosKey(session);
     if (draftKey) {
       dbPromise.then((db) => db.delete('session', draftKey));
@@ -276,24 +308,35 @@ export default function Capture({ addItem, session, sessionLoaded }) {
       {error && <p style={{ color: 'red' }}>{error}</p>}
       <video ref={videoRef} autoPlay playsInline style={{ width: '100%', background: '#000' }} />
       <canvas ref={canvasRef} style={{ display: 'none' }} />
-      <button onClick={capturePhoto} disabled={!stream} style={{ marginTop: '1rem' }}>
-        Capture Photo
-      </button>
-      <label style={{ marginLeft: '0.5rem', cursor: 'pointer' }}>
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handleFileUpload}
-          style={{ display: 'none' }}
-        />
-        <span style={{ padding: '0.5rem 1rem', border: '1px solid #888', borderRadius: '4px' }}>
-          Upload Photo
-        </span>
-      </label>
 
-      <button onClick={triggerBarcodeStub} style={{ marginLeft: '0.5rem' }}>
-        Scan Barcode
-      </button>
+      <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        <button onClick={capturePhoto} disabled={!stream || isAnalyzing}>
+          {isAnalyzing ? 'Processing CV...' : 'Capture Photo'}
+        </button>
+
+        <label style={{ cursor: isAnalyzing ? 'not-allowed' : 'pointer' }}>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleFileUpload}
+            disabled={isAnalyzing}
+            style={{ display: 'none' }}
+          />
+          <span style={{ padding: '0.5rem 1rem', border: '1px solid #888', borderRadius: '4px' }}>
+            {isAnalyzing ? 'Processing...' : 'Upload Photo'}
+          </span>
+        </label>
+
+        <button onClick={triggerBarcodeStub} disabled={isAnalyzing}>
+          Scan Barcode
+        </button>
+      </div>
+
+      {isAnalyzing && (
+        <p style={{ marginTop: '0.5rem', color: '#888' }}>
+          Running quality check and OCR recognition...
+        </p>
+      )}
 
       {retakePrompt && (
         <div style={{ background: '#402020', padding: '1rem', marginTop: '1rem', border: '1px solid red' }}>
@@ -318,7 +361,8 @@ export default function Capture({ addItem, session, sessionLoaded }) {
           ))}
         </div>
       </div>
-      <button onClick={finishItem} style={{ marginTop: '1rem' }}>
+
+      <button onClick={finishItem} disabled={isAnalyzing} style={{ marginTop: '1rem' }}>
         Done with this item
       </button>
     </div>
