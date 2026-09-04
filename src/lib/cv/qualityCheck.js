@@ -37,6 +37,46 @@ export const DEFAULT_BLUR_THRESHOLD = 100.0;
  * @param {number} [options.threshold=DEFAULT_BLUR_THRESHOLD] - Variance threshold to determine pass/fail.
  * @returns {Promise<{ pass: boolean, score: number, threshold: number }>}
  */
+
+async function toCanvasElement(source) {
+  if (source instanceof HTMLCanvasElement) {
+    return source;
+  }
+
+  return new Promise((resolve, reject) => {
+    let img;
+    if (source instanceof HTMLImageElement) {
+      img = source;
+    } else if (typeof source === 'string') {
+      const el = document.getElementById(source);
+      if (el instanceof HTMLCanvasElement) return resolve(el);
+      if (el instanceof HTMLImageElement) {
+        img = el;
+      } else {
+        img = new Image();
+        img.src = source;
+      }
+    } else {
+      return reject(new Error('Invalid image source type'));
+    }
+
+    const onComplete = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas);
+    };
+
+    if (img.complete && (img.naturalWidth || img.width)) {
+      onComplete();
+    } else {
+      img.onload = onComplete;
+      img.onerror = () => reject(new Error('Failed to load image for quality check'));
+    }
+  });
+}
 export async function qualityCheck(imageElementOrCanvas, options = {}) {
   const threshold = options.threshold ?? DEFAULT_BLUR_THRESHOLD;
 
@@ -51,7 +91,8 @@ export async function qualityCheck(imageElementOrCanvas, options = {}) {
 
   try {
     // 1. Read the image / canvas element into a cv.Mat
-    src = cvInstance.imread(imageElementOrCanvas);
+    const canvas = await toCanvasElement(imageElementOrCanvas);
+    src = cvInstance.imread(canvas);
 
     // 2. Convert to Grayscale
     gray = new cvInstance.Mat();

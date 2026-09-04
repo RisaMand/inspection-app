@@ -213,7 +213,7 @@ export default function Capture({ addItem, session, sessionLoaded }) {
 
     setIsAnalyzing(true);
     try {
-      const result = await checkImage(canvas);
+      const result = await checkImage(dataUrl);
 
       if (result.qualityCheck.pass) {
         tryAddPhoto(dataUrl, result);
@@ -244,6 +244,7 @@ export default function Capture({ addItem, session, sessionLoaded }) {
     // always produces, with EXIF rotation already applied.
     try {
       const normalizedDataUrl = await normalizeUploadedImage(file);
+      setIsAnalyzing(true);
       const result = await checkImage(normalizedDataUrl);
 
       if (result.qualityCheck.pass) {

@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react';
 import { dbPromise } from '../db/db';
+import { mapFieldsToRules } from '../lib/mapFieldsToRules.js';
+import { checkCompliance } from '../lib/rules/ruleInterpreter.js';
+import evaluateVerdict from '../lib/rules/verdictEvaluator.js';
+import ruleConfig from '../lib/rules/Ruleconfig.json';
+
+// Active rules for R1: filter out checks requiring bounding boxes
+const r1ActiveRules = (ruleConfig.rules || []).filter(
+  (r) => r.check_type !== 'font_size' && r.check_type !== 'placement'
+);
 
 // Sessions are now a real, permanent list — each record tagged with the
 // userId of whoever created it. This replaces the old single-slot 'current'
@@ -69,8 +78,42 @@ export function useSession(userId) {
     setAllSessions((prev) => [...prev, newSession]);
   }
 
-  async function addItem(photos) {
+  // Accepts either an array of photos (legacy) or an object { photos, ocrText, confidence, isImported }
+  async function addItem(payload) {
     if (!session) return null;
+
+    let photos = [];
+    let ocrText = '';
+    let confidence = 0;
+    let isImported = false;
+
+    if (Array.isArray(payload)) {
+      photos = payload;
+    } else if (payload && typeof payload === 'object') {
+      photos = payload.photos || [];
+      ocrText = payload.ocrText || '';
+      confidence = payload.confidence || 0;
+      isImported = Boolean(payload.isImported);
+    }
+
+    // Run field extraction and compliance evaluation
+    let checkResult = null;
+    try {
+      const extractedFields = mapFieldsToRules(ocrText, confidence, isImported);
+      const ruleResults = checkCompliance(r1ActiveRules, extractedFields);
+      checkResult = evaluateVerdict(ruleResults);
+      checkResult.extractedFields = extractedFields; // attach extracted fields for display in UI
+    } catch (err) {
+      console.error('Compliance check failed during addItem:', err);
+      checkResult = {
+        verdict: 'ERROR',
+        error: err.message,
+        passedRules: 0,
+        failedRules: 0,
+        skippedRules: 0,
+        failures: [],
+      };
+    }
 
     const itemId = crypto.randomUUID();
     const newItem = { id: itemId, photos, checkResult: null };
