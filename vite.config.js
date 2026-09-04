@@ -28,6 +28,7 @@ export default defineConfig({
         // Caching strategy for API routes goes here once Person 2 publishes
         // the endpoint list — NetworkFirst for API calls, CacheFirst for
         // static assets. Left as default (precache static assets) for now.
+        maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,
       },
     }),
   ],
