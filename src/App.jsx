@@ -40,7 +40,7 @@ export default function App() {
           <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="inspector"><ItemResult session={session} /></ProtectedRoute>
         } />
         <Route path="/seizure-memo" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="inspector"><SeizureMemoReview /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="inspector"><SeizureMemoReview session={session} /></ProtectedRoute>
         } />
         <Route path="/consolidated-report" element={
           <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="inspector"><ConsolidatedReport session={session} endSession={endSession} /></ProtectedRoute>

@@ -19,6 +19,7 @@ export default function ConsolidatedReport({ session, endSession }) {
     );
   }
 
+
   function dataUrlToUint8Array(dataUrl) {
     const base64 = dataUrl.split(',')[1];
     const binary = atob(base64);
@@ -63,12 +64,20 @@ export default function ConsolidatedReport({ session, endSession }) {
         y += 8;
 
         doc.setFontSize(10);
-        doc.text(
-          `Compliance status: ${item.checkResult ? 'Reviewed' : 'Compliance check pending (Rule Engine not yet integrated)'
-          }`,
-          10, y
-        );
-        y += 6;
+        if (item.checkResult?.failures?.length > 0) {
+          doc.text('Violations:', 10, y);
+          y += 5;
+          item.checkResult.failures.forEach((f) => {
+            doc.text(` • [${f.clause_citation || f.rule_id}] ${f.description}: ${f.reason}`, 15, y);
+            y += 5;
+          });
+        } else if (item.checkResult) {
+          doc.text('Status: Fully Compliant (No violations detected)', 10, y);
+          y += 6;
+        } else {
+          doc.text('Compliance status: Pending', 10, y);
+          y += 6;
+        }
 
         // Embed photo thumbnails, up to 3 per row, 30x30mm each
         let x = 10;
@@ -136,10 +145,11 @@ export default function ConsolidatedReport({ session, endSession }) {
     }
 
     items.forEach((item, index) => {
+      const verdict = item.checkResult?.verdict || 'PENDING';
       children.push(
         new Paragraph({ text: '' }),
         new Paragraph({
-          text: `Item ${index + 1}`,
+          text: `Item ${index + 1} — ${verdict}`,
           heading: HeadingLevel.HEADING_2,
         }),
         new Paragraph({
@@ -147,12 +157,27 @@ export default function ConsolidatedReport({ session, endSession }) {
             new TextRun({ text: 'Item ID: ', bold: true }),
             new TextRun(item.id),
           ],
-        }),
-        new Paragraph(
-          item.checkResult
-            ? 'Reviewed — see violations below.'
-            : 'Compliance check pending (Rule Engine not yet integrated).'
-        ),
+        })
+      );
+
+      if (item.checkResult?.failures?.length > 0) {
+        item.checkResult.failures.forEach((f) => {
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({ text: `Violation [${f.clause_citation || f.rule_id}]: `, bold: true }),
+                new TextRun(`${f.description} — ${f.reason}`),
+              ],
+            })
+          );
+        });
+      } else if (item.checkResult) {
+        children.push(new Paragraph('Status: Fully Compliant'));
+      } else {
+        children.push(new Paragraph('Status: Evaluation Pending'));
+      }
+
+      children.push(
         new Paragraph({
           text: 'Evidence Photos',
           heading: HeadingLevel.HEADING_3,
@@ -224,6 +249,7 @@ export default function ConsolidatedReport({ session, endSession }) {
         <button onClick={() => navigate('/capture')}>
           Scan Another Item
         </button>
+        <button onClick={() => navigate('/seizure-memo')}>Review Seizure Memo</button>
         <button onClick={handleEndSession}>
           End Inspection Session
         </button>
@@ -245,36 +271,66 @@ export default function ConsolidatedReport({ session, endSession }) {
         {items.length === 0 ? (
           <p>No items scanned yet in this session.</p>
         ) : (
-          items.map((item, index) => (
-            <div
-              key={item.id}
-              style={{
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                padding: '1rem',
-                marginBottom: '1rem',
-              }}
-            >
-              <h3>Item {index + 1}</h3>
-              <p><strong>Photos:</strong> {item.photos.length}</p>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-                {item.photos.map((photo, i) => (
-                  <img
-                    key={i}
-                    src={photo}
-                    alt={`item ${index + 1} photo ${i + 1}`}
-                    style={{ width: 60, height: 60, objectFit: 'cover' }}
-                  />
-                ))}
+          items.map((item, index) => {
+            const verdict = item.checkResult?.verdict || 'PENDING';
+            const isCompliant = verdict === 'COMPLIANT';
+            return (
+              <div
+                key={item.id}
+                style={{
+                  border: '1px solid #444',
+                  borderRadius: '4px',
+                  padding: '1rem',
+                  marginBottom: '1rem',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3>Item {index + 1}</h3>
+                  <span
+                    style={{
+                      padding: '0.2rem 0.5rem',
+                      borderRadius: '4px',
+                      fontSize: '0.85rem',
+                      fontWeight: 'bold',
+                      background: isCompliant ? '#102410' : '#331111',
+                      color: isCompliant ? '#5cd65c' : '#ff6666',
+                      border: `1px solid ${isCompliant ? '#2d7a2d' : '#b32424'}`,
+                    }}
+                  >
+                    {verdict.replace(/_/g, ' ')}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', margin: '0.5rem 0' }}>
+                  {item.photos.map((photo, i) => (
+                    <img
+                      key={i}
+                      src={photo}
+                      alt={`item ${index + 1} photo ${i + 1}`}
+                      style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: '4px' }}
+                    />
+                  ))}
+                </div>
+
+                {item.checkResult?.failures?.length > 0 ? (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: '#ffaaaa' }}>
+                    <strong>Violations:</strong>
+                    <ul style={{ margin: '0.25rem 0', paddingLeft: '1.2rem' }}>
+                      {item.checkResult.failures.map((f, fi) => (
+                        <li key={fi}>
+                          [{f.clause_citation || f.rule_id}] {f.description}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem', color: '#888' }}>
+                    {item.checkResult ? 'No violations detected' : 'Check pending'}
+                  </p>
+                )}
               </div>
-              <p>
-                <strong>Compliance status:</strong>{' '}
-                {item.checkResult
-                  ? 'Reviewed'
-                  : 'Compliance check pending (Rule Engine not yet integrated)'}
-              </p>
-            </div>
-          ))
+            );
+          })
         )}
       </section>
     </div>

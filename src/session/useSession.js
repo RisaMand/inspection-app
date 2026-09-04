@@ -116,7 +116,14 @@ export function useSession(userId) {
     }
 
     const itemId = crypto.randomUUID();
-    const newItem = { id: itemId, photos, checkResult: null };
+    const newItem = {
+      id: itemId,
+      photos,
+      ocrText,
+      confidence,
+      checkResult,
+      createdAt: new Date().toISOString(),
+    };
     const updatedSession = { ...session, items: [...session.items, newItem] };
 
     const db = await dbPromise;

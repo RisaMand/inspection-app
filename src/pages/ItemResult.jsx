@@ -32,6 +32,19 @@ export default function ItemResult({ session }) {
     );
   }
   const { visitNumber, shopNumber, startedAt } = session;
+  const { checkResult, photos, ocrText } = item;
+
+  const verdict = checkResult?.verdict || 'PENDING';
+  const verdictColors = {
+    COMPLIANT: { border: '#2d7a2d', bg: '#102410', text: '#5cd65c' },
+    COMPLIANT_WITH_WARNINGS: { border: '#b38600', bg: '#2b2307', text: '#ffd13b' },
+    NON_COMPLIANT: { border: '#b32424', bg: '#331111', text: '#ff6666' },
+    PASS: { border: '#2d7a2d', bg: '#102410', text: '#5cd65c' },
+    REVIEW: { border: '#b38600', bg: '#2b2307', text: '#ffd13b' },
+    ERROR: { border: '#b32424', bg: '#331111', text: '#ff6666' },
+    PENDING: { border: '#555', bg: '#222', text: '#aaa' },
+  };
+  const activeColor = verdictColors[verdict] || verdictColors.PENDING;
 
   function dataUrlToUint8Array(dataUrl) {
     const base64 = dataUrl.split(',')[1];
@@ -68,8 +81,19 @@ export default function ItemResult({ session }) {
       doc.text('Reviewed — see violations below.', 10, y);
       // Real violation rendering (grouped by tier, clause citations) goes
       // here once Person 4's check-result shape is integrated.
-    } else {
-      doc.text('Compliance check pending (Rule Engine not yet integrated).', 10, y);
+      doc.text(`Verdict: ${verdict}`, 10, y);
+      y += 8;
+
+      if (checkResult?.failures?.length > 0) {
+        doc.setFontSize(11);
+        doc.text('Violations Detected:', 10, y);
+        y += 6;
+        checkResult.failures.forEach((f) => {
+          doc.setFontSize(9);
+          doc.text(`• [${f.rule_id}] ${f.description}: ${f.reason}`, 15, y);
+          y += 6;
+        });
+      }
     }
     y += 12;
 
@@ -129,17 +153,42 @@ export default function ItemResult({ session }) {
         text: 'Compliance Result',
         heading: HeadingLevel.HEADING_2,
       }),
-      new Paragraph(
-        item.checkResult
+      new Paragraph({
+        text: item.checkResult
           ? 'Reviewed — see violations below.'
-          : 'Compliance check pending (Rule Engine not yet integrated).'
-      ),
+          : 'Compliance check pending (Rule Engine not yet integrated).',
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({ text: 'Verdict: ', bold: true }),
+          new TextRun(verdict),
+        ],
+      }),
+    ];
+
+    if (checkResult?.failures?.length > 0) {
+      children.push(
+        new Paragraph({
+          text: 'Violations Detected',
+          heading: HeadingLevel.HEADING_2,
+        })
+      );
+      checkResult.failures.forEach((f) => {
+        children.push(
+          new Paragraph({
+            text: `[${f.rule_id}] ${f.description} — ${f.reason}`,
+          })
+        );
+      });
+    }
+
+    children.push(
       new Paragraph({ text: '' }),
       new Paragraph({
         text: 'Evidence Photos',
         heading: HeadingLevel.HEADING_2,
-      }),
-    ];
+      })
+    );
 
     item.photos.forEach((photo, index) => {
       const imageType = photo.startsWith('data:image/png') ? 'png' : 'jpg';
@@ -166,10 +215,10 @@ export default function ItemResult({ session }) {
     });
 
     const doc = new Document({
-  sections: [{ children }],
-});
+      sections: [{ children }],
+    });
 
-const blob = await Packer.toBlob(doc);
+    const blob = await Packer.toBlob(doc);
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
 
@@ -197,6 +246,14 @@ const blob = await Packer.toBlob(doc);
         <button onClick={() => navigate('/consolidated-report')}>
           View Consolidated Visit Report
         </button>
+        {verdict === 'NON_COMPLIANT' && (
+          <button
+            onClick={() => navigate('/seizure-memo')}
+            style={{ background: '#401010', border: '1px solid #b32424', color: '#ff8888' }}
+          >
+            Draft Seizure Memo
+          </button>
+        )}
       </div>
 
       <section style={{ marginBottom: '1rem' }}>
@@ -208,12 +265,70 @@ const blob = await Packer.toBlob(doc);
 
       <section style={{ marginBottom: '1rem' }}>
         <h2>Compliance Result</h2>
-        <p>
-          {item.checkResult
-            ? 'Reviewed — see violations below.'
-            : 'Compliance check pending (Rule Engine not yet integrated).'}
-        </p>
       </section>
+
+      <div
+        style={{
+          border: `2px solid ${activeColor.border}`,
+          background: activeColor.bg,
+          color: activeColor.text,
+          padding: '1rem',
+          borderRadius: '6px',
+          marginBottom: '1.5rem',
+        }}
+      >
+        <h2 style={{ margin: 0 }}>Verdict: {verdict.replace('_', ' ')}</h2>
+        {checkResult && (
+          <p style={{ margin: '0.5rem 0 0 0', color: '#fff' }}>
+            Passed: {checkResult.passedRules} | Failed: {checkResult.failedRules} | Skipped: {checkResult.skippedRules}
+          </p>
+        )}
+      </div>
+
+      {checkResult?.failures?.length > 0 && (
+        <section style={{ marginBottom: '1.5rem' }}>
+          <h3>Violations Detected ({checkResult.failures.length})</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {checkResult.failures.map((f, idx) => (
+              <div
+                key={idx}
+                style={{
+                  background: '#201010',
+                  border: '1px solid #702020',
+                  padding: '0.75rem',
+                  borderRadius: '4px',
+                }}
+              >
+                <div style={{ fontWeight: 'bold', color: '#ff7777' }}>
+                  [{f.rule_id}] {f.description}
+                </div>
+                <div style={{ fontSize: '0.9rem', color: '#ccc', marginTop: '0.25rem' }}>
+                  {f.reason}
+                </div>
+                {f.clause_citation && (
+                  <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '0.25rem' }}>
+                    Citation: {f.clause_citation}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {checkResult?.extractedFields && (
+        <section style={{ marginBottom: '1.5rem' }}>
+          <h3>Extracted Fields</h3>
+          <div style={{ background: '#181818', padding: '1rem', borderRadius: '4px', fontSize: '0.9rem' }}>
+            {Object.entries(checkResult.extractedFields).map(([key, val]) => (
+              <div key={key} style={{ marginBottom: '0.4rem' }}>
+                <span style={{ color: '#888' }}>{key}: </span>
+                <span>{typeof val === 'object' ? val.text : String(val)}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section>
         <h2>Evidence Photos</h2>
@@ -228,6 +343,25 @@ const blob = await Packer.toBlob(doc);
           ))}
         </div>
       </section>
+
+      {ocrText && (
+        <section>
+          <h3>Raw OCR Output</h3>
+          <pre
+            style={{
+              background: '#111',
+              padding: '0.75rem',
+              borderRadius: '4px',
+              fontSize: '0.8rem',
+              overflowX: 'auto',
+              maxHeight: 180,
+            }}
+          >
+            {ocrText}
+          </pre>
+        </section>
+      )}
+
     </div>
   );
 }
