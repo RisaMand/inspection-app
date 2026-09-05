@@ -238,12 +238,14 @@ export default function ConsolidatedReport({ session, endSession }) {
     <div style={{ padding: '2rem', maxWidth: 600, margin: '0 auto' }}>
       <h1>Consolidated Visit Report</h1>
 
-      <button onClick={exportPDF} style={{ marginBottom: '1rem' }}>
-        Export PDF
-      </button>
-      <button onClick={exportDOCX} style={{ marginBottom: '1rem', marginLeft: '0.75rem' }}>
-        Export DOCX
-      </button>
+      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <button onClick={exportPDF}>
+          Export PDF
+        </button>
+        <button onClick={exportDOCX}>
+          Export DOCX
+        </button>
+      </div>
 
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
         <button onClick={() => navigate('/capture')}>
@@ -278,7 +280,7 @@ export default function ConsolidatedReport({ session, endSession }) {
               <div
                 key={item.id}
                 style={{
-                  border: '1px solid #444',
+                  border: '1px solid var(--border)',
                   borderRadius: '4px',
                   padding: '1rem',
                   marginBottom: '1rem',

@@ -2,14 +2,15 @@ import { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 
 export default function Login({ login, isLoggedIn, authLoaded, currentRole }) {
-  if (authLoaded && isLoggedIn) {
-    return <Navigate to={currentRole === 'inspector' ? '/session' : '/dashboard'} replace />;
-  }
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('inspector'); // 'inspector' | 'official'
   const [error, setError] = useState('');
   const navigate = useNavigate();
+
+  if (authLoaded && isLoggedIn) {
+    return <Navigate to={currentRole === 'inspector' ? '/session' : '/dashboard'} replace />;
+  }
 
   function handleSubmit(e) {
     e.preventDefault();

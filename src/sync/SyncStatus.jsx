@@ -3,10 +3,10 @@ export default function SyncStatus({ pendingCount = 0 }) {
     <div
       style={{
         padding: '0.5rem 0.75rem',
-        border: '1px solid #ccc',
+        border: '1px solid var(--border)',
         borderRadius: '4px',
         display: 'inline-block',
-        fontSize: '0.9rem',
+        fontSize: '0.85rem',
       }}
     >
       {pendingCount > 0
