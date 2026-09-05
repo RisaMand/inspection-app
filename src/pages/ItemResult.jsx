@@ -232,12 +232,14 @@ export default function ItemResult({ session }) {
   return (
     <div style={{ padding: '2rem', maxWidth: 500, margin: '0 auto' }}>
       <h1>Item Report</h1>
-      <button onClick={exportItemPDF} style={{ marginBottom: '1rem' }}>
-        Export PDF
-      </button>
-      <button onClick={exportItemDOCX} style={{ marginBottom: '1rem', marginLeft: '0.75rem' }}>
-        Export DOCX
-      </button>
+      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <button onClick={exportItemPDF}>
+          Export PDF
+        </button>
+        <button onClick={exportItemDOCX}>
+          Export DOCX
+        </button>
+      </div>
 
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
         <button onClick={() => navigate('/capture')}>
@@ -277,7 +279,7 @@ export default function ItemResult({ session }) {
           marginBottom: '1.5rem',
         }}
       >
-        <h2 style={{ margin: 0 }}>Verdict: {verdict.replace('_', ' ')}</h2>
+        <h2 style={{ margin: 0, color: 'inherit' }}>Verdict: {verdict.replace(/_/g, ' ')}</h2>
         {checkResult && (
           <p style={{ margin: '0.5rem 0 0 0', color: '#fff' }}>
             Passed: {checkResult.passedRules} | Failed: {checkResult.failedRules} | Skipped: {checkResult.skippedRules}
@@ -319,7 +321,7 @@ export default function ItemResult({ session }) {
       {checkResult?.extractedFields && (
         <section style={{ marginBottom: '1.5rem' }}>
           <h3>Extracted Fields</h3>
-          <div style={{ background: '#181818', padding: '1rem', borderRadius: '4px', fontSize: '0.9rem' }}>
+          <div style={{ background: '#181818', color: '#e5e5e5', padding: '1rem', borderRadius: '4px', fontSize: '0.9rem' }}>
             {Object.entries(checkResult.extractedFields).map(([key, val]) => (
               <div key={key} style={{ marginBottom: '0.4rem' }}>
                 <span style={{ color: '#888' }}>{key}: </span>
@@ -350,6 +352,7 @@ export default function ItemResult({ session }) {
           <pre
             style={{
               background: '#111',
+              color: '#eee',
               padding: '0.75rem',
               borderRadius: '4px',
               fontSize: '0.8rem',

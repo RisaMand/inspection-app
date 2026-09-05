@@ -310,12 +310,12 @@ export default function Capture({ addItem, session, sessionLoaded }) {
       <video ref={videoRef} autoPlay playsInline style={{ width: '100%', background: '#000' }} />
       <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-      <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+      <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <button onClick={capturePhoto} disabled={!stream || isAnalyzing}>
           {isAnalyzing ? 'Processing CV...' : 'Capture Photo'}
         </button>
 
-        <label style={{ cursor: isAnalyzing ? 'not-allowed' : 'pointer' }}>
+        <label style={{ cursor: isAnalyzing ? 'not-allowed' : 'pointer', display: 'inline-flex' }}>
           <input
             type="file"
             accept="image/*"
@@ -323,7 +323,7 @@ export default function Capture({ addItem, session, sessionLoaded }) {
             disabled={isAnalyzing}
             style={{ display: 'none' }}
           />
-          <span style={{ padding: '0.5rem 1rem', border: '1px solid #888', borderRadius: '4px' }}>
+          <span style={{ padding: '0.6rem 1.2rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '1rem', fontWeight: 500, color: 'var(--text-h)' }}>
             {isAnalyzing ? 'Processing...' : 'Upload Photo'}
           </span>
         </label>
@@ -340,9 +340,9 @@ export default function Capture({ addItem, session, sessionLoaded }) {
       )}
 
       {retakePrompt && (
-        <div style={{ background: '#402020', padding: '1rem', marginTop: '1rem', border: '1px solid red' }}>
+        <div style={{ background: '#402020', color: '#fff', padding: '1rem', marginTop: '1rem', border: '1px solid red', borderRadius: '4px' }}>
           <p>⚠️ Retake needed: {retakePrompt.reason}</p>
-          <button onClick={() => setRetakePrompt(null)}>Dismiss</button>
+          <button onClick={() => setRetakePrompt(null)} style={{ marginTop: '0.5rem' }}>Dismiss</button>
         </div>
       )}
 

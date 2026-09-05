@@ -22,9 +22,9 @@ export default function App() {
   return (
     <BrowserRouter>
       {isLoggedIn && authLoaded && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 1rem', borderBottom: '1px solid var(--border)' }}>
           <SyncStatus pendingCount={session?.items?.length ?? 0} />
-          <button onClick={logout}>Log Out</button>
+          <button onClick={logout} style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}>Log Out</button>
         </div>
       )}
       <Routes>

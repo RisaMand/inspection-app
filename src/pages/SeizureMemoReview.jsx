@@ -27,6 +27,7 @@ export default function SeizureMemoReview({ session }) {
         style={{
           border: status === 'draft' ? '2px solid #b34700' : '2px solid #2d7a2d',
           background: status === 'draft' ? '#402010' : '#102410',
+          color: '#fff',
           padding: '1rem',
           borderRadius: '4px',
           marginBottom: '1.5rem',
@@ -67,12 +68,13 @@ export default function SeizureMemoReview({ session }) {
               style={{
                 border: '1px solid #552020',
                 background: '#1a0d0d',
+                color: '#f3f4f6',
                 borderRadius: '6px',
                 padding: '1rem',
                 marginBottom: '1rem',
               }}
             >
-              <h3>Non-Compliant Item #{idx + 1}</h3>
+              <h3 style={{ color: '#fff', marginTop: 0 }}>Non-Compliant Item #{idx + 1}</h3>
               <p>
                 <strong>Manufacturer / Responsible Party:</strong> {mfgText}
               </p>
