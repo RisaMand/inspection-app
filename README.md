@@ -16,7 +16,7 @@ You photograph a label. Maybe two, front and back. You tap done. Move to the nex
 
 If your signal drops in a shop basement, nothing is lost. Everything you've done lives on the device the whole time.
 
-**What it can't do yet:** it can't *read* the label, and it can't *decide* whether it's legal. Those are the two hardest, most interesting pieces of the whole system — computer vision to extract the text, and a rule-engine to check it against actual statute — and they're not built yet. Every screen that would show a compliance verdict says so plainly: **pending**. Nothing here fakes a result. A wrong guess dressed up as a verdict is worse than an honest blank, and this project has tried hard not to make that mistake even once.
+**What changed, and what still can't.** For a long time this line read *it can't read the label, and it can't decide whether it's legal* — the two hardest pieces of the whole system, built separately by two other teammates, sitting completely unconnected to everything above. That's no longer true. A real OCR pipeline and a real, config-driven rule-engine are now wired straight into the capture flow: a label genuinely gets read, and a defined slice of it — the mandatory declarations being present at all, MRP format, that kind of thing — genuinely gets checked against real rule config, live, in the browser, landing on screen as **COMPLIANT**, **COMPLIANT WITH WARNINGS**, or **NON-COMPLIANT** instead of a placeholder. What's still honestly out of scope, and still says so rather than guessing: font-size and on-panel placement checks (they need bounding-box data this pass doesn't produce yet, so they're filtered out of evaluation rather than faked), multilingual OCR, and the sticker/price-tamper detection this project was originally conceived to specialize in. The pipeline also hasn't yet been run through the two structured real-product test cases that would formally close this milestone out — that's the deliberately next step, parked rather than skipped. Nothing here fakes a result. A wrong guess dressed up as a verdict is worse than an honest blank, and this project has tried hard not to make that mistake even once.
 
 ## Under the hood, for the people who care
 
@@ -38,9 +38,9 @@ A few decisions worth knowing about before you go digging in the code:
 | Capturing evidence (camera, multi-photo, upload) | Real |
 | One visit per person, safely, always | Real |
 | Item & visit reports, PDF + editable Word export | Real |
-| Seizure memo (the serious legal document) | The mechanics work; the words inside are waiting on the rule-engine |
-| Actually reading the label (OCR) | Not built yet |
-| Actually judging compliance | Not built yet |
+| Seizure memo (the serious legal document) | Real — populated with real verdicts, clause citations, and extracted fields |
+| Actually reading the label (OCR) | Wired in and running (Tesseract, in-browser) — not yet run through structured real-product verification |
+| Actually judging compliance | Wired in and running, for presence & format rules — font-size and placement checks deliberately excluded pending bounding-box data |
 | Official-side dashboard | Not built — no real data to show yet |
 | A real server, real accounts, real sync | Not built yet |
 
