@@ -1,6 +1,6 @@
 function checkFormat(fieldData, formatType) {
 
-    // Step 1: Validate input
+    // Check whether field exists
     if (!fieldData || !fieldData.text) {
         return {
             passed: false,
@@ -9,17 +9,36 @@ function checkFormat(fieldData, formatType) {
         };
     }
 
-    // Step 2: Clean OCR text
     const text = fieldData.text.trim();
 
-    // Step 3: Check MRP format
     if (formatType === "MRP") {
 
-        const mrpPattern = /^(MRP\s*)?(Rs\.?|₹)\s*\d+(\.\d{1,2})?$/i;
+        /*
+         * MRP format:
+         *
+         * Optional MRP label:
+         * MRP
+         * M.R.P
+         * M.R.P.
+         *
+         * Optional separator:
+         * :
+         * .
+         *
+         * Currency:
+         * Rs
+         * Rs.
+         * ₹
+         *
+         * Numeric value:
+         * 120
+         * 1,299
+         * 12,500.50
+         */
+        const mrpPattern =
+            /(?:MRP|M\.R\.P\.?)?\s*[:.]?\s*(?:Rs\.?|₹)\s*[\d,]+(?:\.\d{1,2})?\b/i;
 
-        const passed = mrpPattern.test(text);
-
-        if (passed) {
+        if (mrpPattern.test(text)) {
             return {
                 passed: true,
                 confidence: fieldData.confidence || 0,
@@ -30,17 +49,15 @@ function checkFormat(fieldData, formatType) {
         return {
             passed: false,
             confidence: fieldData.confidence || 0,
-            reason: "MRP does not match the required format"
+            reason: "MRP format is invalid"
         };
     }
 
-    // Step 4: Unsupported format
     return {
         passed: false,
         confidence: fieldData.confidence || 0,
-        reason: "Unsupported format type",
-        error: "Unsupported format type"
+        reason: "Unsupported format type"
     };
 }
 
-export default checkFormat;
+module.exports = checkFormat;
