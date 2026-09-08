@@ -122,8 +122,8 @@ The backend requires the following secure local environment.
 - **Batch Processing:** Accepts an `items` array. Failure of one item does not roll back the entire batch (Partial Success).
 - **Client ID:** The PWA must generate and provide a UUID `clientInspectionId`.
 - **Conflicts & Server Versions:** 
-  - `CREATE` operations do not require a version. 
-  - `UPDATE` operations require `baseServerVersion`. 
+  - `CREATE` operations **do not require** `baseServerVersion`. The field is optional for create operations.
+  - `UPDATE` and `SUBMIT` operations **require** `baseServerVersion` (positive integer). 
   - If `baseServerVersion` sent by the client is lower than the database's `server_version`, a stale update is detected.
 - **Stale-Update Conflict Response:** The backend refuses to overwrite the data. It returns `status: "CONFLICT"` for that item in the results array, along with the actual `serverVersion` and `serverId`.
 - **Frontend Action Required:** On `CONFLICT`, the PWA must prompt the user or automatically merge the changes, then re-sync with the new `baseServerVersion`.

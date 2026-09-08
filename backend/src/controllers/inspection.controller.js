@@ -278,10 +278,19 @@ exports.getReportData = async (req, res) => {
     capturedData: {
       productName: data.product_name,
       brandName: data.brand_name,
+      manufacturerName: data.manufacturer_name,
+      manufacturerAddress: data.manufacturer_address,
+      packerName: data.packer_name,
+      packerAddress: data.packer_address,
+      importerName: data.importer_name,
+      importerAddress: data.importer_address,
       declaredQuantity: data.declared_quantity,
       mrp: data.mrp,
       packedDate: data.packed_date,
-      barcodeValue: data.barcode_value
+      expiryDate: data.expiry_date,
+      customerCareDetails: data.customer_care_details,
+      barcodeValue: data.barcode_value,
+      mrpRawText: data.mrp_raw_text
     },
     extractedFields: data.extracted_fields,
     imageReferences: data.image_references,

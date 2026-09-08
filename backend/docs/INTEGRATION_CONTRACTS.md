@@ -8,6 +8,9 @@ The core integration for the offline PWA is `POST /api/v1/sync/inspections`.
 - **Payload Hash:** Repeated keys with different payloads will return a `409 Conflict`.
 - **Conflicts:** The backend implements a "Server-Wins" conflict policy. If `baseServerVersion` sent by the client does not match `server_version` in the DB, the server will not overwrite data. It will return a `CONFLICT` status for that item and provide the `serverRecord` and `serverVersion` so the client can resolve it.
 - **Rule Configuration:** Every new inspection *must* supply the `ruleConfigVersion` it was created against. Ensure you fetch and cache `GET /api/v1/rules/active`.
+- **Version Requirements:**
+  - `CREATE` operations: `baseServerVersion` is **optional** (can be omitted).
+  - `UPDATE` and `SUBMIT` operations: `baseServerVersion` is **required** (must be a positive integer matching the current server version).
 
 ## Rule Engine Handoff
 - Backend stores rule configs but does *not* evaluate logic.
