@@ -285,7 +285,7 @@ exports.getReportData = async (req, res) => {
       importerName: data.importer_name,
       importerAddress: data.importer_address,
       declaredQuantity: data.declared_quantity,
-      mrp: data.mrp,
+      mrp: data.mrp !== null ? String(data.mrp) : null,
       packedDate: data.packed_date,
       expiryDate: data.expiry_date,
       customerCareDetails: data.customer_care_details,
