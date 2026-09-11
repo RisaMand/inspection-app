@@ -23,5 +23,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
 *.traineddata
 
+
+
+!.env.example

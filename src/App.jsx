@@ -16,8 +16,8 @@ import ReportViewer from './pages/ReportViewer';
 import OfficerActivity from './pages/OfficerActivity';
 
 export default function App() {
-  const { isLoggedIn, role, userId, login, logout, authLoaded } = useAuth();
-  const { session, sessionLoaded, startSession, addItem, endSession } = useSession(userId);
+  const { isLoggedIn, role, userId, token, login, logout, authLoaded } = useAuth();
+  const { session, sessionLoaded, startSession, addItem, endSession } = useSession(userId, token)
 
   return (
     <BrowserRouter>

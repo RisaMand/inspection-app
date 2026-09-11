@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { dbPromise } from '../db/db';
+import { api } from '../lib/api/client';
 import { mapFieldsToRules } from '../lib/mapFieldsToRules.js';
 import { checkCompliance } from '../lib/rules/ruleInterpreter.js';
 import evaluateVerdict from '../lib/rules/verdictEvaluator.js';
@@ -13,20 +14,10 @@ const r1ActiveRules = (ruleConfig.rules || []).filter(
   (r) => r.check_type !== 'font_size' && r.check_type !== 'placement'
 );
 
-// Sessions are now a real, permanent list — each record tagged with the
-// userId of whoever created it. This replaces the old single-slot 'current'
-// key entirely. A given user has at most one ACTIVE session (endedAt ===
-// null) at a time; ending a session archives it (sets endedAt) rather than
-// deleting it, so it remains real, retrievable history.
-
-export function useSession(userId) {
+export function useSession(userId, token) {
   const [allSessions, setAllSessions] = useState([]);
   const [sessionLoaded, setSessionLoaded] = useState(false);
 
-  // Load every session record on mount. We load all records (not just this
-  // user's) so the hook stays simple and correct even if userId arrives
-  // late (e.g. before auth has finished loading) — filtering happens below,
-  // not at the query level.
   useEffect(() => {
     async function loadSessions() {
       const db = await dbPromise;
@@ -37,27 +28,19 @@ export function useSession(userId) {
     loadSessions();
   }, []);
 
-  // This user's own active session (endedAt === null), or null if they
-  // don't have one. This is what every existing screen reads as `session`
-  // — same shape as before, just now correctly scoped to the right person.
   const session = userId
     ? allSessions.find((s) => s.createdBy === userId && s.endedAt === null) ?? null
     : null;
 
-  // This user's own finished sessions — real, permanent history.
   const sessionHistory = userId
     ? allSessions.filter((s) => s.createdBy === userId && s.endedAt !== null)
     : [];
 
   async function startSession(visitNumber, shopNumber, gps) {
-    if (!userId) return; // no logged-in user to attribute this session to
+    if (!userId) return;
 
     const db = await dbPromise;
 
-    // If this user already has an active session (e.g. they explicitly
-    // chose to override the warning in StartSession.jsx), archive it
-    // first — never leave two sessions simultaneously active for the same
-    // user, since that makes which one is "current" ambiguous.
     if (session) {
       const archivedPrevious = { ...session, endedAt: new Date().toISOString() };
       await db.put('sessions', archivedPrevious);
@@ -66,8 +49,25 @@ export function useSession(userId) {
       );
     }
 
+    let serverId = null;
+    let syncStatus = 'PENDING';
+    try {
+      const serverSession = await api.createSession(token, {
+        visit_number: visitNumber || undefined,
+        shop_number: shopNumber || undefined,
+        gps_lat: gps?.lat,
+        gps_lng: gps?.lng,
+      });
+      serverId = serverSession.id;
+      syncStatus = 'SYNCED';
+    } catch (err) {
+      console.warn('Session did not sync to server, continuing offline:', err.message);
+    }
+
     const newSession = {
       id: crypto.randomUUID(),
+      serverId,
+      syncStatus,
       createdBy: userId,
       visitNumber,
       shopNumber,
@@ -81,7 +81,6 @@ export function useSession(userId) {
     setAllSessions((prev) => [...prev, newSession]);
   }
 
-  // Accepts either an array of photos (legacy) or an object { photos, ocrText, ocrRawText, confidence, isImported }
   async function addItem(payload) {
     if (!session) return null;
 
@@ -101,7 +100,6 @@ export function useSession(userId) {
       isImported = Boolean(payload.isImported);
     }
 
-    // Run field extraction and compliance evaluation
     let checkResult = null;
     try {
       const textToExtract = ocrRawText && ocrRawText !== ocrText
@@ -110,7 +108,7 @@ export function useSession(userId) {
       const extractedFields = mapFieldsToRules(textToExtract, confidence, isImported);
       const ruleResults = checkCompliance(r1ActiveRules, extractedFields);
       checkResult = evaluateVerdict(ruleResults);
-      checkResult.extractedFields = extractedFields; // attach extracted fields for display in UI
+      checkResult.extractedFields = extractedFields;
     } catch (err) {
       console.error('Compliance check failed during addItem:', err);
       checkResult = {
@@ -154,6 +152,14 @@ export function useSession(userId) {
     setAllSessions((prev) =>
       prev.map((s) => (s.id === archivedSession.id ? archivedSession : s))
     );
+
+    if (archivedSession.serverId) {
+      try {
+        await api.closeSession(token, archivedSession.serverId);
+      } catch (err) {
+        console.warn('Failed to close session on server:', err.message);
+      }
+    }
   }
 
   return {
