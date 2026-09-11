@@ -10,6 +10,13 @@ import { preprocessForOCR } from './preprocess.js';
  */
 export const DEFAULT_PSM = PSM.SPARSE_TEXT;
 
+/**
+ * OCR language set: single-pass English + Hindi. The worker is created with
+ * exactly this set and it never varies at runtime, so it doubles as the
+ * `language` value reported in Contract A′ output.
+ */
+export const OCR_LANGUAGES = 'eng+hin';
+
 let workerPromise = null;
 let workerPSM = null;
 
@@ -22,7 +29,7 @@ let workerPSM = null;
 async function getWorker(psm) {
   if (!workerPromise) {
     workerPromise = (async () => {
-      const worker = await createWorker('eng+hin');
+      const worker = await createWorker(OCR_LANGUAGES);
       await worker.setParameters({ tessedit_pageseg_mode: psm });
       workerPSM = psm;
       return worker;
@@ -48,7 +55,7 @@ async function getWorker(psm) {
  * @param {number} [options.upscaleFactor] - Passed to preprocessForOCR.
  * @param {number} [options.blockSize] - Passed to preprocessForOCR.
  * @param {number} [options.c] - Passed to preprocessForOCR.
- * @returns {Promise<{ ocrText: string, confidence: number }>}
+ * @returns {Promise<{ ocrText: string, confidence: number, language: string }>}
  */
 export async function runOCR(imageElementOrCanvas, options = {}) {
   const { psm = DEFAULT_PSM, preprocess = true, ...preprocessOptions } = options;
@@ -64,7 +71,79 @@ export async function runOCR(imageElementOrCanvas, options = {}) {
   return {
     ocrText: data.text.trim(),
     confidence: data.confidence, // Overall confidence score (0 - 100)
+    language: OCR_LANGUAGES,
   };
+}
+
+/**
+ * Loads a photo into its intrinsic dimensions. Accepts a DOM Image (must
+ * already be loaded or loadable), a Canvas (used directly), or a data
+ * URL / path string.
+ */
+function loadImageSource(photo) {
+  if (photo instanceof HTMLCanvasElement) {
+    return Promise.resolve({ source: photo, width: photo.width, height: photo.height });
+  }
+  return new Promise((resolve, reject) => {
+    const img = photo instanceof HTMLImageElement ? photo : new Image();
+    if (!(photo instanceof HTMLImageElement)) img.src = photo;
+    const done = () =>
+      resolve({ source: img, width: img.naturalWidth || img.width, height: img.naturalHeight || img.height });
+    if (img.complete && (img.naturalWidth || img.width)) done();
+    else {
+      img.onload = done;
+      img.onerror = () => reject(new Error('Failed to load image for region OCR'));
+    }
+  });
+}
+
+/**
+ * Recognizes each detected text box independently and returns the
+ * `{ box, text, confidence }` regions `attachRegionBoxes()` consumes.
+ * Each crop is a single text block, so regions run under SINGLE_BLOCK
+ * (the shared worker is re-pinned; the next whole-image pass re-pins
+ * back). Crops are upscaled to a minimum 80px line height — the same
+ * floor the offline proof runs used.
+ *
+ * Honest cost note: this is one worker pass per region (typically 20-50
+ * on real labels, seconds each on-device). Whole-image word-to-box
+ * assignment would be faster and is the known future optimization; the
+ * per-region pass is what the tested pipeline proves today.
+ *
+ * @param {HTMLImageElement | HTMLCanvasElement | string} photo
+ * @param {Array<{ x: number, y: number, w: number, h: number }>} boxes
+ * @returns {Promise<{ regions: Array<{ box: object, text: string, confidence: number }>, imageSize: { width: number, height: number } }>}
+ */
+export async function recognizeRegions(photo, boxes, options = {}) {
+  const worker = await getWorker(options.regionPsm || PSM.SINGLE_BLOCK);
+  const { source, width, height } = await loadImageSource(photo);
+
+  const full = document.createElement('canvas');
+  full.width = width;
+  full.height = height;
+  const fullCtx = full.getContext('2d', { willReadFrequently: true });
+  fullCtx.drawImage(source, 0, 0);
+
+  const regions = [];
+  for (const box of boxes || []) {
+    const x = Math.max(0, Math.round(box.x - 2));
+    const y = Math.max(0, Math.round(box.y - 2));
+    const w = Math.min(width - x, Math.round(box.w + 4));
+    const h = Math.min(height - y, Math.round(box.h + 4));
+    if (w <= 0 || h <= 0) continue;
+    const scale = Math.max(1, 80 / h);
+    const crop = document.createElement('canvas');
+    crop.width = Math.round(w * scale);
+    crop.height = Math.round(h * scale);
+    crop.getContext('2d', { willReadFrequently: true }).drawImage(full, x, y, w, h, 0, 0, crop.width, crop.height);
+    const { data } = await worker.recognize(crop);
+    regions.push({
+      box: { x: box.x, y: box.y, w: box.w, h: box.h },
+      text: (data.text || '').trim(),
+      confidence: data.confidence,
+    });
+  }
+  return { regions, imageSize: { width, height } };
 }
 
 /**

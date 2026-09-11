@@ -29,6 +29,23 @@ export default defineConfig({
         // the endpoint list — NetworkFirst for API calls, CacheFirst for
         // static assets. Left as default (precache static assets) for now.
         maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,
+        // Offline-first OCR: tesseract.js pulls its worker script, WASM
+        // core, and eng/hin traineddata from jsDelivr at runtime by
+        // default. CacheFirst (with opaque-response caching) means one
+        // online load warms the cache and every later run — including
+        // airplane mode — is served on-device. Without this, checkImage()
+        // cannot initialize its worker with zero network.
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/npm\/(tesseract\.js|tesseract\.js-core|@tesseract\.js-data)\//,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'tesseract-cdn',
+              expiration: { maxEntries: 20, maxAgeSeconds: 90 * 24 * 60 * 60 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
     }),
   ],

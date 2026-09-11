@@ -11,6 +11,15 @@ const MIN_ALNUM = 2;
 /** Lines ending here are complete thoughts and keep their line break. */
 const TERMINAL_PUNCT_RE = /[.!?:;]$/;
 
+/**
+ * A continuation line shorter than this never fuses with its neighbours.
+ * Whole-image SPARSE passes on dense labels emit fragment soup ("C9",
+ * "Zz", "[ER]") that must stand alone: joining them manufactures longer
+ * garbage ("C9 }", "[Ere Xt ey") out of specks. Genuine wrapped prose
+ * continuations on labels run much longer, so they still join.
+ */
+const MIN_JOIN_LEN = 12;
+
 const countAlnum = (line) => (line.match(/[\p{L}\p{N}]/gu) || []).length;
 
 /**
@@ -47,7 +56,20 @@ export function cleanOcrText(rawText, options = {}) {
       if (m) {
         const key = m[1].trim();
         const value = m[2].trim();
-        if (key && value) extractedFields[key] = value; // last wins on duplicates
+        if (key && value) {
+          // Strip duplicate tokens / stutter from value (e.g. key ends with "By", value starts with "By:")
+          const keyWords = key.toLowerCase().split(/\s+/).filter(Boolean);
+          const lastWord = keyWords[keyWords.length - 1];
+          let cleanVal = value.replace(/^[:\-\s.,;]+|[:\-\s,;]+$/g, '');
+          if (lastWord && lastWord.length >= 2) {
+            const escaped = lastWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const stutterRegex = new RegExp(`^(?:${escaped}[:\\-\\s.,;]*)+`, 'i');
+            cleanVal = cleanVal.replace(stutterRegex, '').replace(/^[:\-\s.,;]+|[:\-\s,;]+$/g, '');
+          }
+          if (cleanVal && countAlnum(cleanVal) >= 1) {
+            extractedFields[key] = cleanVal; // last wins on duplicates
+          }
+        }
       }
     }
 
@@ -57,6 +79,8 @@ export function cleanOcrText(rawText, options = {}) {
     }
 
     // Join soft-wrapped lines; keep breaks after complete thoughts and KV lines.
+    // Short lines never fuse: they are either complete on their own
+    // ("250 g") or OCR specks that must not weld onto neighbours.
     const parts = [];
     let current = [];
     const flush = () => {
@@ -66,6 +90,17 @@ export function cleanOcrText(rawText, options = {}) {
       }
     };
     for (const line of lines) {
+      if (current.length > 0) {
+        const prev = current[current.length - 1];
+        if (
+          TERMINAL_PUNCT_RE.test(prev) ||
+          prev.includes(':') ||
+          prev.length < MIN_JOIN_LEN ||
+          line.length < MIN_JOIN_LEN
+        ) {
+          flush();
+        }
+      }
       current.push(line);
       if (TERMINAL_PUNCT_RE.test(line) || line.includes(':')) flush();
     }

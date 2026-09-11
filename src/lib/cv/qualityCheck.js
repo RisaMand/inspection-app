@@ -38,7 +38,7 @@ export const DEFAULT_BLUR_THRESHOLD = 100.0;
  * @returns {Promise<{ pass: boolean, score: number, threshold: number }>}
  */
 
-async function toCanvasElement(source) {
+export async function toCanvasElement(source) {
   if (source instanceof HTMLCanvasElement) {
     return source;
   }

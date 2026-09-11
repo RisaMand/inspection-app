@@ -17,12 +17,20 @@ export default function ComplianceReportBody({ item, session }) {
   // Display-only: rule-engine keys (MANUFACTURER_ADDRESS) become
   // human-readable labels; internal flags like isImported are skipped.
   function fieldLabel(key) {
+    if (key === 'MRP') return 'MRP';
+    if (key === 'UNIT_SALE_PRICE') return 'Unit Sale Price';
     const words = key.toLowerCase().replace(/_/g, ' ');
     return words.charAt(0).toUpperCase() + words.slice(1);
   }
   const fieldEntries = checkResult?.extractedFields
     ? Object.entries(checkResult.extractedFields).filter(
-        ([, val]) => val && typeof val === 'object' && typeof val.text === 'string'
+        ([key, val]) =>
+          key !== 'isImported' &&
+          val &&
+          typeof val === 'object' &&
+          (typeof val.value === 'string'
+            ? val.value.trim().length > 0
+            : typeof val.text === 'string' && val.text.trim().length > 0)
       )
     : [];
 
@@ -108,7 +116,9 @@ export default function ComplianceReportBody({ item, session }) {
                 <div style={{ color: '#888', fontSize: '0.75rem', textTransform: 'uppercase' }}>
                   {fieldLabel(key)}
                 </div>
-                <div style={{ marginTop: '0.15rem' }}>{val.text}</div>
+                <div style={{ marginTop: '0.15rem', whiteSpace: 'pre-line' }}>
+                  {val.value || val.text}
+                </div>
               </div>
             ))}
           </div>

@@ -5,7 +5,10 @@ import { checkCompliance } from '../lib/rules/ruleInterpreter.js';
 import evaluateVerdict from '../lib/rules/verdictEvaluator.js';
 import ruleConfig from '../lib/rules/Ruleconfig.json';
 
-// Active rules for R1: filter out checks requiring bounding boxes
+// Placement and font-size checks are out of scope for this round — final,
+// not pending (Person 4 decision, confirmed): legal panel identity cannot
+// be derived from OCR box geometry and no DPI is measured, so these rules
+// stay filtered out of live evaluation rather than faked.
 const r1ActiveRules = (ruleConfig.rules || []).filter(
   (r) => r.check_type !== 'font_size' && r.check_type !== 'placement'
 );

@@ -15,8 +15,7 @@ function checkFormat(fieldData, formatType) {
     // Step 3: Check MRP format
     if (formatType === "MRP") {
 
-        const mrpPattern = /^(MRP\s*)?(Rs\.?|₹)\s*\d+(\.\d{1,2})?$/i;
-
+        const mrpPattern = /(MRP|M\.R\.P\.?)?\s*[:.]?\s*(Rs\.?|₹)\s*[\d,]+(\.\d{1,2})?/i;
         const passed = mrpPattern.test(text);
 
         if (passed) {

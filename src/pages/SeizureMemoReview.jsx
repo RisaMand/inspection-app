@@ -58,8 +58,14 @@ export default function SeizureMemoReview({ session }) {
         </p>
       ) : (
         nonCompliantItems.map((item, idx) => {
+          const extracted = item.checkResult?.extractedFields;
           const mfgText =
-            item.checkResult?.extractedFields?.MANUFACTURER_ADDRESS?.text ||
+            extracted?.MANUFACTURER_ADDRESS?.full_text ||
+            (extracted?.MANUFACTURER?.text && extracted?.MANUFACTURER_ADDRESS?.text
+              ? `${extracted.MANUFACTURER.text}, ${extracted.MANUFACTURER_ADDRESS.text}`
+              : extracted?.MANUFACTURER?.text ||
+                extracted?.MANUFACTURER_ADDRESS?.value ||
+                extracted?.MANUFACTURER_ADDRESS?.text) ||
             'Manufacturer details missing/not detected';
 
           return (

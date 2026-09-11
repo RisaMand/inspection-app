@@ -54,7 +54,7 @@
     {
       "rule_id": "CONSUMER_CARE_PRESENCE",
       "description": "Consumer complaint contact information must be declared",
-      "clause_citation": "Rule 6(1)(f)",
+      "clause_citation": "Rule 6(2)",
       "field": "CONSUMER_CARE",
       "check_type": "presence",
       "severity": "substantive",
@@ -64,10 +64,44 @@
     {
       "rule_id": "COUNTRY_OF_ORIGIN",
       "description": "Country of origin must be declared for imported packages",
-      "clause_citation": "Rule 6(1)(f)",
+      "clause_citation": "Rule 6(1)(aa)",
       "field": "COUNTRY_OF_ORIGIN",
       "check_type": "conditional_presence",
       "condition": "imported_product",
+      "severity": "substantive",
+      "effective_from": "2011-06-01",
+      "effective_to": null
+    },
+
+    {
+      "rule_id": "UNIT_SALE_PRICE_PRESENCE",
+      "description": "Unit sale price must be declared on packages where separately required",
+      "clause_citation": "Rule 6(11)",
+      "field": "UNIT_SALE_PRICE",
+      "check_type": "conditional_presence",
+      "condition": "unit_sale_price_applicable",
+      "severity": "substantive",
+      "effective_from": "2022-12-01",
+      "effective_to": null
+    },
+    {
+      "rule_id": "STANDARD_QUANTITY_SPECIFICATION",
+      "description": "Prescribed commodities must comply with standard package sizes in Second Schedule or declare non-standard size",
+      "clause_citation": "Rule 5 read with Second Schedule",
+      "field": "STANDARD_QUANTITY",
+      "check_type": "conditional_presence",
+      "condition": "standard_pack_applicable",
+      "severity": "substantive",
+      "effective_from": "2011-06-01",
+      "effective_to": null
+    },
+    {
+      "rule_id": "BATCH_NUMBER_PRESENCE",
+      "description": "Batch or lot number must be declared for applicable commodity categories for traceability",
+      "clause_citation": "Rule 6(1)(g) read with Rule 2(c)",
+      "field": "BATCH_NUMBER",
+      "check_type": "conditional_presence",
+      "condition": "batch_applicable",
       "severity": "substantive",
       "effective_from": "2011-06-01",
       "effective_to": null
