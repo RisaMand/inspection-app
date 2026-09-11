@@ -155,7 +155,20 @@ All endpoints are prefixed with `/api/v1`.
     },
     "capturedData": {
       "productName": "Test Product",
-      "mrp": "50.00"
+      "brandName": "Test Brand",
+      "manufacturerName": "ABC Manufacturing",
+      "manufacturerAddress": "123 Industrial Area",
+      "packerName": "XYZ Packers",
+      "packerAddress": "456 Packing District",
+      "importerName": "Import Co",
+      "importerAddress": "789 Trade Zone",
+      "declaredQuantity": "500ml",
+      "mrp": "50.00",
+      "mrpRawText": "MRP Rs. 50.00",
+      "packedDate": "2025-01-01",
+      "expiryDate": "2026-12-31",
+      "customerCareDetails": "Call 1800-XXX-XXXX",
+      "barcodeValue": "BAR123456"
     },
     "extractedFields": { ... },
     "imageReferences": [ ... ],
