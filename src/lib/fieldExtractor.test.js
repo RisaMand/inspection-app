@@ -284,5 +284,30 @@ describe('fieldExtractor integration & regression cases', () => {
     assert.equal(result.manufacture_date, '13 June 2025');
     assert.equal(result.expiry_date, '14 Dec 2025');
   });
+
+  it('extracts net quantity from Hindi packaging labels (प्रति सर्विग मात्रा / शुद्ध मात्रा)', () => {
+    const ocrText = [
+      'पोषण संबंधी जानकारी',
+      'प्रति सर्विग मात्रा: 30 ग्राम',
+      'ऊर्जा (कैलोरी) 160',
+      'निर्माता: एबीसी फूड प्रोडक्ट्स',
+      'अधिकतम खुदरा मूल्य: ₹120',
+    ].join('\n');
+
+    const result = extractFields(ocrText);
+    assert.equal(result.net_quantity, '30 ग्राम');
+    assert.equal(result.NET_QUANTITY.field, 'NET_QUANTITY');
+  });
+
+  it('extracts net quantity using Hindi regex fallback for standalone units', () => {
+    const ocrText = [
+      'निर्माता: पतंजलि आयुर्वेद लिमिटेड',
+      '500 ग्राम',
+      'अधिकतम खुदरा मूल्य: ₹150',
+    ].join('\n');
+
+    const result = extractFields(ocrText);
+    assert.equal(result.net_quantity, '500 ग्राम');
+  });
 });
 
