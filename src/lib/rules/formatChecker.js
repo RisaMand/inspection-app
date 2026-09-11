@@ -10,12 +10,12 @@ function checkFormat(fieldData, formatType) {
     }
 
     // Step 2: Clean OCR text
-    const text = fieldData.text.trim();
+    const text = ((fieldData.source_text ? fieldData.source_text + ' ' : '') + (fieldData.text || '')).trim();
 
     // Step 3: Check MRP format
     if (formatType === "MRP") {
 
-        const mrpPattern = /(MRP|M\.R\.P\.?)?\s*[:.]?\s*(Rs\.?|₹)\s*[\d,]+(\.\d{1,2})?/i;
+        const mrpPattern = /(?:(?:MRP|M\.R\.P\.?)\s*[:.]?\s*(?:Rs\.?|₹|¥|\?|INR)?|(?:Rs\.?|₹|¥)\s*)\s*[\d,]+(?:\.\d{1,2})?/i;
         const passed = mrpPattern.test(text);
 
         if (passed) {

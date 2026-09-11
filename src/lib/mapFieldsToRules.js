@@ -5,9 +5,16 @@ const FIELD_SYNONYMS = {
   MANUFACTURER_ADDRESS: [
     // English
     'manufactured by',
+    'manufactured in',
     'marketed by',
     'mfd by',
+    'mfd in',
+    'mfg by',
     'packed by',
+    'address line',
+    'registered office',
+    'regd. office',
+    'factory address',
 
     // Hindi
     'निर्माता',
@@ -42,11 +49,29 @@ const FIELD_SYNONYMS = {
   MANUFACTURE_DATE: [
     // English
     'Mfg. Date',
+    'mfg. date',
+    'mfd. date',
+    'mfg date',
+    'mfd date',
     'mfg',
     'mfd',
     'mig',
+    'mtg',
+    'mfe',
+    'dom',
+    'd.o.m',
+    'dop',
+    'd.o.p',
+    'packing date',
+    'packaging date',
+    'when packed',
     'packed on',
+    'pkd on',
+    'pkd date',
+    'pkd',
     'date of manufacture',
+    'date of mfg',
+    'date of packing',
 
     // Hindi
     'निर्माण तिथि',
@@ -97,6 +122,14 @@ const FIELD_SYNONYMS = {
     'consumer care',
     'for complaints',
     'helpline',
+    'contact us',
+    'contact no',
+    'contact',
+    'call us',
+    'tel no',
+    'phone no',
+    'email id',
+    'email',
 
     // Hindi
     'ग्राहक सेवा',
@@ -161,11 +194,13 @@ const FIELD_SYNONYMS = {
     // English
     'Batch No',
     'batch no',
+    'batchno',
     'batch number',
     'batch',
     'b.no',
     'b. no',
     'lot no',
+    'lotno',
     'lot number',
     'lot',
 

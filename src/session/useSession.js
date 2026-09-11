@@ -104,7 +104,10 @@ export function useSession(userId) {
     // Run field extraction and compliance evaluation
     let checkResult = null;
     try {
-      const extractedFields = mapFieldsToRules(ocrText, confidence, isImported);
+      const textToExtract = ocrRawText && ocrRawText !== ocrText
+        ? `${ocrText}\n\n${ocrRawText}`
+        : (ocrText || ocrRawText);
+      const extractedFields = mapFieldsToRules(textToExtract, confidence, isImported);
       const ruleResults = checkCompliance(r1ActiveRules, extractedFields);
       checkResult = evaluateVerdict(ruleResults);
       checkResult.extractedFields = extractedFields; // attach extracted fields for display in UI

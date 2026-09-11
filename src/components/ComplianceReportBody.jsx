@@ -19,6 +19,14 @@ export default function ComplianceReportBody({ item, session }) {
   function fieldLabel(key) {
     if (key === 'MRP') return 'MRP';
     if (key === 'UNIT_SALE_PRICE') return 'Unit Sale Price';
+    if (key === 'MANUFACTURER_ADDRESS') return 'Manufacturer Address / Place of Manufacture';
+    if (key === 'PLACE_OF_MANUFACTURE') return 'Place of Manufacture';
+    if (key === 'MANUFACTURE_DATE') return 'Manufacture Date';
+    if (key === 'EXPIRY_DATE') return 'Expiry Date';
+    if (key === 'BATCH_NUMBER') return 'Batch Number';
+    if (key === 'CONSUMER_CARE') return 'Consumer Care';
+    if (key === 'NET_QUANTITY') return 'Net Quantity';
+    if (key === 'COMMODITY_NAME') return 'Commodity Name';
     const words = key.toLowerCase().replace(/_/g, ' ');
     return words.charAt(0).toUpperCase() + words.slice(1);
   }

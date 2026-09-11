@@ -239,5 +239,50 @@ describe('fieldExtractor integration & regression cases', () => {
     assert.equal(result.manufacturer, 'ABC Food Products Pvt. Ltd.');
     assert.ok(result.manufacturer.endsWith('Ltd.'), 'trailing period in "Ltd." should be preserved');
   });
+
+  it('strips barcode noise and isolates pure date from "Mfg. Date: 13 June 2025 Ji 90086"', () => {
+    const ocrText = 'Mfg. Date: 13 June 2025 Ji 90086';
+    const result = extractFields(ocrText);
+    assert.equal(result.manufacture_date, '13 June 2025');
+    assert.equal(result.MANUFACTURE_DATE.value, '13 June 2025');
+  });
+
+  it('extracts manufacture date with OCR misread label "Mtg. Date"', () => {
+    const ocrText = [
+      'Batch No: AB12345',
+      'Mtg. Date: 13 June 2025',
+      'Exp. Date: 14 Dec 2025',
+      'MRP: ₹120',
+    ].join('\n');
+
+    const result = extractFields(ocrText);
+    assert.equal(result.manufacture_date, '13 June 2025');
+    assert.equal(result.expiry_date, '14 Dec 2025');
+  });
+
+  it('extracts manufacture date when label and date are on separate lines', () => {
+    const ocrText = [
+      'Batch No: AB12345',
+      'Mfg. Date:',
+      '13 June 2025',
+      'Exp. Date: 14 Dec 2025',
+    ].join('\n');
+
+    const result = extractFields(ocrText);
+    assert.equal(result.manufacture_date, '13 June 2025');
+  });
+
+  it('disambiguates unlabelled manufacture date when expiry date is known', () => {
+    const ocrText = [
+      'Batch No: AB12345',
+      '13 June 2025',
+      'Exp. Date: 14 Dec 2025',
+      'MRP: ₹120',
+    ].join('\n');
+
+    const result = extractFields(ocrText);
+    assert.equal(result.manufacture_date, '13 June 2025');
+    assert.equal(result.expiry_date, '14 Dec 2025');
+  });
 });
 

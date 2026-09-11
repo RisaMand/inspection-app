@@ -89,20 +89,25 @@ export function cleanOcrText(rawText, options = {}) {
         current = [];
       }
     };
+    const LABEL_START_RE = /^[^a-zA-Z0-9\u0900-\u097F]*(?:[a-zA-Z]\s+)?(?:MRP|M\.R\.P|Net|Batch|Mfg|Mfd|Exp|Best|Use|Pack|Pkd|Date|Address|Contact|Email|Customer|Consumer|Ingredients|Nutrition|Serving|Calories|Standard|Non Standard|Common Name|Product Name|Lic|FSSAI|Barcode|Store|Keep|When)\b/i;
     for (const line of lines) {
       if (current.length > 0) {
         const prev = current[current.length - 1];
         if (
           TERMINAL_PUNCT_RE.test(prev) ||
           prev.includes(':') ||
+          line.includes(':') ||
           prev.length < MIN_JOIN_LEN ||
-          line.length < MIN_JOIN_LEN
+          line.length < MIN_JOIN_LEN ||
+          LABEL_START_RE.test(line) ||
+          LABEL_START_RE.test(prev) ||
+          (/^\p{Lu}/u.test(line) && !prev.endsWith('-'))
         ) {
           flush();
         }
       }
       current.push(line);
-      if (TERMINAL_PUNCT_RE.test(line) || line.includes(':')) flush();
+      if (TERMINAL_PUNCT_RE.test(line) || line.includes(':') || LABEL_START_RE.test(line)) flush();
     }
     flush();
     paragraphs.push(parts.join('\n'));
