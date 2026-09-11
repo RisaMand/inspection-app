@@ -369,10 +369,32 @@ export const FIELD_DEFINITIONS = [
       'weight:',
       'quantity:',
       // Hindi
+      'शुद्ध मात्रा:',
       'शुद्ध मात्रा',
+      'शुद्ध वजन:',
       'शुद्ध वजन',
+      'शुद्ध भार:',
       'शुद्ध भार',
+      'शुद्ध आयतन:',
       'शुद्ध आयतन',
+      'प्रति सर्विंग मात्रा:',
+      'प्रति सर्विंग मात्रा',
+      'प्रति सर्विग मात्रा:',
+      'प्रति सर्विग मात्रा',
+      'सर्विंग मात्रा:',
+      'सर्विंग मात्रा',
+      'सर्विग मात्रा:',
+      'सर्विग मात्रा',
+      'कुल मात्रा:',
+      'कुल मात्रा',
+      'कुल वजन:',
+      'कुल वजन',
+      'कुल भार:',
+      'कुल भार',
+      'मात्रा:',
+      'वजन:',
+      'भार:',
+      'आयतन:',
     ],
   },
   {
@@ -661,6 +683,11 @@ export function isValidFieldValue(val, matchedAlias = '', definition = null) {
   // For dates, require either a digit or a month abbreviation/name
   if (definition?.field === 'MANUFACTURE_DATE' || definition?.field === 'EXPIRY_DATE') {
     if (!/\d/.test(clean) && !/(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(clean)) return false;
+  }
+
+  // For net quantity, require at least one digit
+  if (definition?.field === 'NET_QUANTITY') {
+    if (!/\d/.test(clean)) return false;
   }
 
   const lower = clean.toLowerCase();
@@ -1212,28 +1239,29 @@ export function extractFields(ocrText, options = {}) {
   }
 
   // Stage 9: Regex fallback for NET_QUANTITY
-  // Catches patterns like "150g", "250 ml", "1.5 L", "500 gm", "Net 150g"
+  // Catches patterns like "150g", "250 ml", "1.5 L", "500 gm", "Net 150g", "30 ग्राम", "शुद्ध मात्रा: 500 ग्राम"
   if (!extracted.NET_QUANTITY) {
-    const NET_QTY_RE = /(?:net\s*(?:wt|weight|qty|quantity|vol|volume|content)?\.?\s*[:.]?\s*)?\b(\d+(?:\.\d+)?\s*(?:g|gm|gms|gram|grams|kg|kgs|ml|l|ltr|litre|litres|liter|liters|oz|fl\s*oz|cc|cl|pieces?|pcs?|units?)\b)/i;
+    const NET_QTY_RE = /(?:(?:net\s*(?:wt|weight|qty|quantity|vol|volume|content)?|(?:शुद्ध|कुल|सर्विंग|प्रति\s*सर्वि[ंँग]?\s*)?\s*(?:मात्रा|वजन|भार|आयतन))\.?\s*[:.]?\s*)?(?:^|\b)(\d+(?:\.\d+)?\s*(?:g|gm|gms|gram|grams|kg|kgs|ml|l|ltr|litre|litres|liter|liters|oz|fl\s*oz|cc|cl|pieces?|pcs?|units?|ग्राम|ग्रा\.?|किग्रा|कि\.ग्रा\.?|किलोग्राम|मिली|मि\.ली\.?|मिलीलीटर|लीटर|ली\.?|नग|इकाई))(?!\p{L}|\p{N})/iu;
     for (const item of normalizedLines) {
       if (item.isBlank) continue;
-      // Skip lines that are clearly nutrition info, not net quantity
-      if (/(?:serving|calories|total\s*fat|saturated|carbohydrate|sugar|protein|sodium|cholesterol|energy|per\s*serving|amount\s*per)/i.test(item.text)) continue;
+      // Skip lines that are clearly nutrition info, unless it contains quantity/net/serving quantity
+      const isNutrition = /(?:serving|calories|total\s*fat|saturated|carbohydrate|sugar|protein|sodium|cholesterol|energy|per\s*serving|amount\s*per|पोषण|ऊर्जा|कैलोरी|वसा|कार्बोहाइड्रेट|शर्करा|प्रोटीन)/i.test(item.text);
+      const hasNetLabel = /(?:net|शुद्ध|मात्रा|वजन|भार|आयतन)/i.test(item.text);
+      if (isNutrition && !hasNetLabel) continue;
       // Skip lines already consumed by other fields
-      if (/(?:mrp|m\.r\.p|price|₹|rs\.?)/i.test(item.text)) continue;
+      if (/(?:mrp|m\.r\.p|price|₹|rs\.?|मूल्य|कीमत)/i.test(item.text)) continue;
       const m = item.text.match(NET_QTY_RE);
       if (m && m[1]) {
         const qtyVal = m[1].trim();
-        // Only accept if the line looks like it's about net quantity (has "net" or is standalone)
+        // Only accept if the line looks like it's about net quantity (has net/quantity label or is standalone short line)
         const lineWords = item.text.trim().split(/\s+/);
-        const hasNetLabel = /net/i.test(item.text);
         const isShortLine = lineWords.length <= 4;
         if (hasNetLabel || isShortLine) {
           extracted.NET_QUANTITY = {
             field: 'NET_QUANTITY',
             value: qtyVal,
             text: qtyVal,
-            raw_label: hasNetLabel ? item.text.slice(0, item.text.toLowerCase().indexOf('net')) + 'Net' : '',
+            raw_label: hasNetLabel ? (item.text.match(/(?:net[^\d:]*|शुद्ध[^\d:]*|मात्रा[^\d:]*)/i)?.[0] || 'Net:') : '',
             matched_label: 'regex fallback',
             source_text: item.raw,
             confidence,
