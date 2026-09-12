@@ -589,10 +589,3 @@ export function getInspectionById(id) {
   }
   return null;
 }
-
-// Temporary export for Step 4.1a verification only — remove once 4.1b's
-// query functions are confirmed working against this data.
-export function _debugCounts() {
-  const totalItems = RAW_SESSIONS.reduce((sum, s) => sum + s.items.length, 0);
-  return { sessions: RAW_SESSIONS.length, items: totalItems };
-}
