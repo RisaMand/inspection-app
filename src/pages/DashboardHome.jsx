@@ -3,7 +3,8 @@ import {
   PieChart, Pie, Cell, Legend, Tooltip,
   LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
 } from 'recharts';
-import { getDashboardSummary, getViolationsByTier, getTrendingViolationTypes } from '../dashboard/mockDashboardData';
+import jsPDF from 'jspdf';
+import { getDashboardSummary, getViolationsByTier, getTrendingViolationTypes, getFilteredSessionsForExport, toRow } from '../dashboard/mockDashboardData';
 
 const TIER_COLORS = { substantive: '#ff6666', cosmetic: '#ffd13b' };
 
@@ -42,6 +43,33 @@ const cardValueStyle = {
   fontWeight: 'bold',
   marginTop: '0.25rem',
 };
+
+function getImageDimensions(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => resolve({ width: 1, height: 1 });
+    img.src = dataUrl;
+  });
+}
+
+// Same SVG-to-JPEG normalization as FilterDrilldown's export — mock photos
+// are SVG placeholders, jsPDF.addImage needs real raster bytes.
+function normalizeToJpeg(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/jpeg'));
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
 
 function SummaryCard({ label, value, color }) {
   return (
@@ -128,9 +156,81 @@ function TrendChart() {
 export default function DashboardHome() {
   const summary = getDashboardSummary();
 
+  async function exportAllPDF() {
+    const pairs = getFilteredSessionsForExport({}); // no filters = everything
+    const doc = new jsPDF();
+    let y = 15;
+
+    doc.setFontSize(16);
+    doc.text('Full Inspection Report — All Sessions', 10, y);
+    y += 8;
+    doc.setFontSize(10);
+    doc.text(`${pairs.length} item(s) total`, 10, y);
+    y += 12;
+
+    for (const { item, session } of pairs) {
+      if (y > 240) {
+        doc.addPage();
+        y = 15;
+      }
+
+      const row = toRow(item, session);
+      doc.setFontSize(12);
+      doc.text(`Visit ${row.visitNumber} — Shop ${row.shopNumber}`, 10, y);
+      y += 6;
+      doc.setFontSize(10);
+      doc.text(`Inspector: ${row.inspectorName}  |  Product: ${row.productName}`, 10, y);
+      y += 6;
+      doc.text(`Date: ${new Date(row.createdAt).toLocaleDateString()}  |  Verdict: ${row.verdict}`, 10, y);
+      y += 7;
+
+      if (item.checkResult?.failures?.length > 0) {
+        item.checkResult.failures.forEach((f) => {
+          doc.text(` • [${f.clause_citation || f.rule_id}]: ${f.reason}`, 15, y);
+          y += 5;
+        });
+      } else {
+        doc.text('No violations detected.', 15, y);
+        y += 5;
+      }
+
+      let x = 10;
+      const rawPhotos = item.photos || [];
+      const normalizedPhotos = await Promise.all(
+        rawPhotos.map((p) => normalizeToJpeg(p).catch(() => null))
+      );
+      const photoDims = await Promise.all(rawPhotos.map(getImageDimensions));
+      normalizedPhotos.forEach((jpeg, i) => {
+        if (!jpeg) return;
+        if (x > 150) {
+          x = 10;
+          y += 35;
+        }
+        const { width: natW, height: natH } = photoDims[i];
+        const maxBox = 30;
+        const scale = Math.min(maxBox / natW, maxBox / natH);
+        try {
+          doc.addImage(jpeg, 'JPEG', x, y, natW * scale, natH * scale);
+        } catch (e) {
+          // skip a photo that fails to embed rather than break the whole export
+        }
+        x += 35;
+      });
+
+      y += 40;
+    }
+
+    doc.save(`full-inspection-report-${Date.now()}.pdf`);
+  }
+
   return (
     <div style={{ padding: '2rem', maxWidth: 900, margin: '0 auto' }}>
-      <h1>Dashboard</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1>Dashboard</h1>
+        <button onClick={exportAllPDF} style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem', height: 'fit-content' }}>
+          Export Full Report ({summary.totalItemsInspected})
+        </button>
+      </div>
 
       <section style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '2rem' }}>
         <SummaryCard label="Total Sessions" value={summary.totalSessions} />
