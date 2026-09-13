@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { getFilteredSessions, MOCK_INSPECTORS } from '../dashboard/mockDashboardData';
+import jsPDF from 'jspdf';
+import { getFilteredSessions, getFilteredSessionsForExport, MOCK_INSPECTORS, toRow } from '../dashboard/mockDashboardData';
 
 const VERDICT_COLORS = {
   COMPLIANT: '#5cd65c',
@@ -44,19 +45,52 @@ const rowStyle = {
 
 const EMPTY_FILTERS = { dateFrom: '', dateTo: '', inspectorId: '', shop: '', severity: '' };
 
+function buildActiveFilters(filters) {
+  return {
+    dateFrom: filters.dateFrom || undefined,
+    dateTo: filters.dateTo || undefined,
+    inspectorId: filters.inspectorId || undefined,
+    shop: filters.shop || undefined,
+    severity: filters.severity || undefined,
+  };
+}
+
+function getImageDimensions(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => resolve({ width: 1, height: 1 });
+    img.src = dataUrl;
+  });
+}
+
+// Mock item photos are SVG placeholders (fine for on-screen <img>), but
+// jsPDF.addImage only accepts real raster bytes (JPEG/PNG). Draw whatever
+// format comes in onto an offscreen canvas and re-encode as JPEG — same
+// technique already used for real captured photos (see the "Normalize all
+// uploaded photos to JPEG via canvas re-encode" commit), extended here to
+// also cover SVG, which real camera captures never produce but this mock
+// data does.
+function normalizeToJpeg(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/jpeg'));
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
 export default function FilterDrilldown() {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
 
-  const results = useMemo(() => {
-    const active = {
-      dateFrom: filters.dateFrom || undefined,
-      dateTo: filters.dateTo || undefined,
-      inspectorId: filters.inspectorId || undefined,
-      shop: filters.shop || undefined,
-      severity: filters.severity || undefined,
-    };
-    return getFilteredSessions(active);
-  }, [filters]);
+  const results = useMemo(() => getFilteredSessions(buildActiveFilters(filters)), [filters]);
 
   function update(field, value) {
     setFilters((prev) => ({ ...prev, [field]: value }));
@@ -64,6 +98,78 @@ export default function FilterDrilldown() {
 
   function clearFilters() {
     setFilters(EMPTY_FILTERS);
+  }
+
+  async function exportFilteredPDF() {
+    const pairs = getFilteredSessionsForExport(buildActiveFilters(filters));
+    const doc = new jsPDF();
+    let y = 15;
+
+    doc.setFontSize(16);
+    doc.text('Filtered Inspection Report', 10, y);
+    y += 8;
+    doc.setFontSize(10);
+    doc.text(`${pairs.length} item(s) matching current filters`, 10, y);
+    y += 12;
+
+    if (pairs.length === 0) {
+      doc.text('No items match the current filters.', 10, y);
+    }
+
+    for (const { item, session } of pairs) {
+      if (y > 240) {
+        doc.addPage();
+        y = 15;
+      }
+
+      const row = toRow(item, session);
+      const verdict = row.verdict;
+      doc.setFontSize(12);
+      doc.text(`Visit ${row.visitNumber} — Shop ${row.shopNumber}`, 10, y);
+      y += 6;
+      doc.setFontSize(10);
+      doc.text(`Inspector: ${row.inspectorName}  |  Product: ${row.productName}`, 10, y);
+      y += 6;
+      doc.text(`Date: ${new Date(row.createdAt).toLocaleDateString()}  |  Verdict: ${verdict}`, 10, y);
+      y += 7;
+
+      if (item.checkResult?.failures?.length > 0) {
+        item.checkResult.failures.forEach((f) => {
+          doc.text(` • [${f.clause_citation || f.rule_id}]: ${f.reason}`, 15, y);
+          y += 5;
+        });
+      } else {
+        doc.text('No violations detected.', 15, y);
+        y += 5;
+      }
+
+      let x = 10;
+      const rawPhotos = item.photos || [];
+      const normalizedPhotos = await Promise.all(
+        rawPhotos.map((p) => normalizeToJpeg(p).catch(() => null))
+      );
+      const photoDims = await Promise.all(rawPhotos.map(getImageDimensions));
+      normalizedPhotos.forEach((jpeg, i) => {
+        if (!jpeg) return; // this one photo failed to normalize, skip only it
+        if (x > 150) {
+          x = 10;
+          y += 35;
+        }
+        const { width: natW, height: natH } = photoDims[i];
+        const maxBox = 30;
+        const scale = Math.min(maxBox / natW, maxBox / natH);
+        try {
+          doc.addImage(jpeg, 'JPEG', x, y, natW * scale, natH * scale);
+        } catch (e) {
+          // skip a photo that fails to embed rather than break the whole export
+        }
+        x += 35;
+      });
+
+      y += 40;
+    }
+
+    doc.save(`filtered-inspection-report-${Date.now()}.pdf`);
   }
 
   return (
@@ -104,9 +210,18 @@ export default function FilterDrilldown() {
             </select>
           </div>
         </div>
-        <button onClick={clearFilters} style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}>
-          Clear Filters
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button onClick={clearFilters} style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}>
+            Clear Filters
+          </button>
+          <button
+            onClick={exportFilteredPDF}
+            disabled={results.length === 0}
+            style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem', opacity: results.length === 0 ? 0.5 : 1 }}
+          >
+            Export Filtered PDF ({results.length})
+          </button>
+        </div>
       </section>
 
       <section style={panelStyle}>

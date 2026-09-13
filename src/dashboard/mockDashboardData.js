@@ -439,7 +439,7 @@ function productName(item) {
 }
 
 // Public row shape shared by searchDashboard and getFilteredSessions.
-function toRow(item, session) {
+export function toRow(item, session) {
   return {
     itemId: item.id,
     sessionId: session.id,
@@ -536,19 +536,31 @@ export function searchDashboard(query) {
   );
 }
 
-export function getFilteredSessions({ dateFrom, dateTo, inspectorId, shop, severity } = {}) {
+function applyFilters(pairs, { dateFrom, dateTo, inspectorId, shop, severity } = {}) {
   const fromTime = dateFrom ? new Date(dateFrom).getTime() : -Infinity;
   const toTime = dateTo ? new Date(dateTo).getTime() : Infinity;
 
-  return allItemsFlat()
+  return pairs
     .filter(({ session }) => {
       const t = new Date(session.startedAt).getTime();
       return t >= fromTime && t <= toTime;
     })
     .filter(({ session }) => !inspectorId || session.createdBy === inspectorId)
     .filter(({ session }) => !shop || session.shopNumber.toLowerCase().includes(shop.toLowerCase()))
-    .filter(({ item }) => !severity || itemSeverityTier(item) === severity)
-    .map(({ item, session }) => toRow(item, session));
+    .filter(({ item }) => !severity || itemSeverityTier(item) === severity);
+}
+
+export function getFilteredSessions(filters = {}) {
+  return applyFilters(allItemsFlat(), filters).map(({ item, session }) => toRow(item, session));
+}
+
+// Same filter logic as getFilteredSessions (via applyFilters, kept in one
+// place so the two can't drift apart), but returns full {item, session}
+// pairs instead of the light toRow() shape — needed for Step 4.8's export,
+// which embeds evidence photos and violation lists that toRow() deliberately
+// omits for the on-screen table.
+export function getFilteredSessionsForExport(filters = {}) {
+  return applyFilters(allItemsFlat(), filters);
 }
 
 export function getOfficerActivity() {
