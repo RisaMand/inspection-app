@@ -264,9 +264,7 @@ export default function ItemResult({ session }) {
         </button>
         {verdict === 'NON_COMPLIANT' && (
           <button
-            onClick={() => navigate('/seizure-memo')}
-            style={{ background: '#401010', border: '1px solid #b32424', color: '#ff8888' }}
-          >
+            onClick={() => navigate('/seizure-memo', { state: { itemId: item.id } })}>
             Draft Seizure Memo
           </button>
         )}
