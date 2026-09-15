@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { pool } = require('../config/db');
 const { success, error } = require('../utils/apiResponse');
+const { resolveProduct } = require('../services/productMatcher');
 
 exports.syncInspections = async (req, res) => {
   const { idempotencyKey, items } = req.body;
@@ -44,15 +45,26 @@ exports.syncInspections = async (req, res) => {
       }
 
       if (item.operation === 'CREATE') {
+        // Resolve (or create) the products row this capture belongs to.
+        // Every CREATE gets a product_id now, even with zero identifying
+        // data -- see productMatcher.js for the match/create strategy.
+        const product = await resolveProduct(client, {
+          barcodeValue: item.payload.barcodeValue,
+          productName: item.payload.productName,
+          brandName: item.payload.brandName,
+          manufacturerName: item.payload.manufacturerName,
+          declaredQuantity: item.payload.declaredQuantity
+        });
+
         const insertRes = await client.query(`
           INSERT INTO inspections (
             client_inspection_id, inspector_id, status, product_name, brand_name,
             manufacturer_name, manufacturer_address, packer_name, packer_address,
             importer_name, importer_address, declared_quantity, mrp, mrp_raw_text, packed_date, expiry_date,
             customer_care_details, barcode_value, image_references, ocr_payload, extracted_fields,
-            rule_config_version, client_created_at, client_updated_at
+            rule_config_version, client_created_at, client_updated_at, product_id
           ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
           )
           ON CONFLICT (client_inspection_id) DO NOTHING
           RETURNING id, server_version, updated_at
@@ -65,7 +77,7 @@ exports.syncInspections = async (req, res) => {
           item.payload.customerCareDetails, item.payload.barcodeValue,
           JSON.stringify(item.payload.imageReferences), JSON.stringify(item.payload.ocrPayload),
           JSON.stringify(item.payload.extractedFields), item.ruleConfigVersion,
-          item.clientUpdatedAt, item.clientUpdatedAt
+          item.clientUpdatedAt, item.clientUpdatedAt, product.id
         ]);
 
         if (insertRes.rows.length > 0) {
@@ -151,7 +163,27 @@ exports.syncInspections = async (req, res) => {
             continue;
           }
           const newStatus = item.operation === 'SUBMIT' ? 'PENDING_REVIEW' : (item.payload.status || serverRecord.status);
-          
+
+          // Only re-resolve the product link if this update actually touches
+          // a product-identifying field -- otherwise keep the inspection
+          // pointed at whatever product it was already linked to.
+          const touchesProductFields = [
+            item.payload.barcodeValue, item.payload.productName, item.payload.brandName,
+            item.payload.manufacturerName, item.payload.declaredQuantity
+          ].some((v) => v !== undefined);
+
+          let productId = serverRecord.product_id;
+          if (touchesProductFields) {
+            const product = await resolveProduct(client, {
+              barcodeValue: item.payload.barcodeValue !== undefined ? item.payload.barcodeValue : serverRecord.barcode_value,
+              productName: item.payload.productName !== undefined ? item.payload.productName : serverRecord.product_name,
+              brandName: item.payload.brandName !== undefined ? item.payload.brandName : serverRecord.brand_name,
+              manufacturerName: item.payload.manufacturerName !== undefined ? item.payload.manufacturerName : serverRecord.manufacturer_name,
+              declaredQuantity: item.payload.declaredQuantity !== undefined ? item.payload.declaredQuantity : serverRecord.declared_quantity
+            });
+            productId = product.id;
+          }
+
           const updateRes = await client.query(`
             UPDATE inspections SET
               status = $1, product_name = $2, brand_name = $3, manufacturer_name = $4,
@@ -159,9 +191,9 @@ exports.syncInspections = async (req, res) => {
               importer_name = $8, importer_address = $9, declared_quantity = $10,
               mrp = $11, mrp_raw_text = $12, packed_date = $13, expiry_date = $14, customer_care_details = $15,
               barcode_value = $16, image_references = $17, ocr_payload = $18,
-              extracted_fields = $19, client_updated_at = $20, server_version = server_version + 1,
+              extracted_fields = $19, product_id = $20, client_updated_at = $21, server_version = server_version + 1,
               synced_at = NOW(), updated_at = NOW()
-            WHERE id = $21 AND server_version = $22
+            WHERE id = $22 AND server_version = $23
             RETURNING server_version, updated_at
           `, [
             newStatus,
@@ -183,6 +215,7 @@ exports.syncInspections = async (req, res) => {
             item.payload.imageReferences !== undefined ? JSON.stringify(item.payload.imageReferences) : serverRecord.image_references,
             item.payload.ocrPayload !== undefined ? JSON.stringify(item.payload.ocrPayload) : serverRecord.ocr_payload,
             item.payload.extractedFields !== undefined ? JSON.stringify(item.payload.extractedFields) : serverRecord.extracted_fields,
+            productId,
             item.clientUpdatedAt,
             serverRecord.id,
             item.baseServerVersion
