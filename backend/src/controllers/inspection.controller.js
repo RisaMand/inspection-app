@@ -103,7 +103,7 @@ exports.updateInspection = async (req, res) => {
     }
 
     // Perform partial update
-    const allowedFields = ['product_name', 'brand_name', 'manufacturer_name', 'manufacturer_address', 'packer_name', 'packer_address', 'importer_name', 'importer_address', 'declared_quantity', 'mrp', 'packed_date', 'expiry_date', 'customer_care_details', 'barcode_value', 'image_references', 'ocr_payload', 'extracted_fields', 'status'];
+    const allowedFields = ['product_name', 'brand_name', 'manufacturer_name', 'manufacturer_address', 'packer_name', 'packer_address', 'importer_name', 'importer_address', 'declared_quantity', 'mrp', 'mrp_raw_text', 'packed_date', 'expiry_date', 'customer_care_details', 'barcode_value', 'image_references', 'ocr_payload', 'extracted_fields', 'status'];
     
     let updateQuery = 'UPDATE inspections SET ';
     const queryValues = [];

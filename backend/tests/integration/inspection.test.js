@@ -108,7 +108,7 @@ describe('Inspection API Integration', () => {
     const crypto = require('crypto');
     const fullInspectionId = crypto.randomUUID();
     const clientInspectionId = crypto.randomUUID();
-    
+
     await pool.query(`
       INSERT INTO inspections (
         id, client_inspection_id, inspector_id, rule_config_version, status,
@@ -139,7 +139,7 @@ describe('Inspection API Integration', () => {
 
     expect(res.statusCode).toEqual(200);
     expect(res.body.success).toBe(true);
-    
+
     // Verify all fields are present
     const capturedData = res.body.data.capturedData;
     expect(capturedData.productName).toEqual('Test Product');
@@ -156,5 +156,23 @@ describe('Inspection API Integration', () => {
     expect(capturedData.expiryDate).toBeDefined();
     expect(capturedData.customerCareDetails).toEqual('Call 1800-XXX-XXXX');
     expect(capturedData.barcodeValue).toEqual('BAR123456');
+  });
+
+  it('PATCH can set mrp_raw_text (A6)', async () => {
+    const crypto = require('crypto');
+    const id = crypto.randomUUID();
+    await pool.query(
+      'INSERT INTO inspections (id, client_inspection_id, inspector_id, rule_config_version, status, server_version, client_updated_at) VALUES ($1, $1, $2, $3, $4, $5, $6)',
+      [id, '33333333-3333-3333-3333-333333333333', testRuleConfigVersion, 'DRAFT', 1, '2026-01-01T00:00:00Z']
+    );
+
+    var res = await request(app)
+      .patch('/api/v1/inspections/' + id)
+      .set('Authorization', 'Bearer ' + inspectorToken)
+      .send({ server_version: 1, mrp_raw_text: 'MRP Rs. 149.00 (incl. of all taxes)' });
+
+    expect(res.statusCode).toEqual(200);
+    expect(res.body.data.mrp_raw_text).toEqual('MRP Rs. 149.00 (incl. of all taxes)');
+    expect(res.body.data.server_version).toEqual(2);
   });
 });

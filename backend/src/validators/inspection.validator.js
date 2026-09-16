@@ -17,6 +17,7 @@ exports.updateInspectionSchema = z.object({
     expiry_date: z.string().optional().nullable(),
     customer_care_details: z.string().optional().nullable(),
     barcode_value: z.string().optional().nullable(),
+    mrp_raw_text: z.string().optional().nullable(),
     image_references: z.array(z.any()).optional().nullable(),
     ocr_payload: z.any().optional().nullable(),
     extracted_fields: z.any().optional().nullable(),
