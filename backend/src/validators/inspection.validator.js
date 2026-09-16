@@ -30,10 +30,18 @@ exports.attachComplianceResultSchema = z.object({
     ruleConfigVersion: z.string().min(1),
     status: z.enum(['EVALUATED', 'FAILED']),
     result: z.object({
-      overallVerdict: z.string().optional(),
-      violations: z.array(z.any()).optional(),
-      warnings: z.array(z.any()).optional(),
-      evaluatedAt: z.string().optional()
+      verdict: z.enum(['COMPLIANT', 'COMPLIANT_WITH_WARNINGS', 'NON_COMPLIANT', 'ERROR']),
+      totalRules: z.number().int(),
+      passedRules: z.number().int(),
+      failedRules: z.number().int(),
+      skippedRules: z.number().int(),
+      failures: z.array(z.object({
+        rule_id: z.string(),
+        reason: z.string(),
+        severity: z.enum(['cosmetic', 'substantive']),
+        clause_citation: z.string(),
+        confidence: z.number()
+      }))
     }).passthrough()
   })
 });

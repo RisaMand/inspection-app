@@ -91,16 +91,39 @@ describe('Inspection API Integration', () => {
     var res = await request(app)
       .post('/api/v1/inspections/' + testInspectionId + '/compliance-result')
       .set('Authorization', 'Bearer ' + adminToken)
-      .send({
+            .send({
         ruleConfigVersion: testRuleConfigVersion,
         status: 'EVALUATED',
         result: {
-          verdict: 'COMPLIANT'
+          verdict: 'COMPLIANT',
+          totalRules: 5,
+          passedRules: 5,
+          failedRules: 0,
+          skippedRules: 0,
+          failures: []
         }
       });
 
     expect(res.statusCode).toEqual(200);
     expect(res.body.data.compliance_result.verdict).toEqual('COMPLIANT');
+  });
+
+  
+  it('Attach compliance result rejects the old wrong-shape payload (A4)', async () => {
+    var res = await request(app)
+      .post('/api/v1/inspections/' + testInspectionId + '/compliance-result')
+      .set('Authorization', 'Bearer ' + adminToken)
+      .send({
+        ruleConfigVersion: testRuleConfigVersion,
+        status: 'EVALUATED',
+        result: {
+          overallVerdict: 'COMPLIANT',
+          violations: [],
+          warnings: []
+        }
+      });
+
+    expect(res.statusCode).toEqual(400);
   });
 
   it('Report data includes all Legal Metrology fields', async () => {
