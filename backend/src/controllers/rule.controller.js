@@ -77,13 +77,13 @@ exports.createRuleConfig = async (req, res) => {
 };
 
 exports.activateRuleConfig = async (req, res) => {
-  const { id } = req.params; // this could be version string or uuid, let's assume id is uuid for REST, but version is easier. Let's use ID as per spec.
+  const { version } = req.params;
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
-    const check = await client.query('SELECT * FROM rule_configs WHERE id = $1', [id]);
+
+    const check = await client.query('SELECT * FROM rule_configs WHERE version = $1', [version]);
     if (check.rows.length === 0) {
       throw { statusCode: 404, code: 'NOT_FOUND', message: 'Rule configuration not found' };
     }
@@ -99,9 +99,9 @@ exports.activateRuleConfig = async (req, res) => {
     const result = await client.query(`
       UPDATE rule_configs
       SET status = 'ACTIVE', effective_from = NOW(), effective_to = NULL, updated_at = NOW()
-      WHERE id = $1
+      WHERE version = $1
       RETURNING version, status
-    `, [id]);
+    `, [version]);
 
     await client.query('COMMIT');
     res.json(success(result.rows[0]));
