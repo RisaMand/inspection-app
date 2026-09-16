@@ -7,6 +7,14 @@ process.env.CORS_ORIGIN = 'http://localhost:5173';
 process.env.BCRYPT_SALT_ROUNDS = '1';
 process.env.MAX_JSON_BODY_SIZE = '10mb';
 process.env.LOG_LEVEL = 'error';
+// Real-shaped but fake -- the actual Supabase client is replaced by the
+// manual mock in __mocks__/@supabase/supabase-js.js, so these values never
+// reach a real network call. They just need to be present (env.js fails
+// fast if they're missing) and well-formed enough for createClient() to
+// construct without throwing.
+process.env.SUPABASE_URL = 'https://test-project.supabase.co';
+process.env.SUPABASE_SECRET_KEY = 'test_secret_key';
+process.env.SUPABASE_STORAGE_BUCKET = 'inspection-photos-test';
 
 const { newDb } = require('pg-mem');
 const fs = require('fs');

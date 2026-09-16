@@ -1,5 +1,6 @@
 const { pool } = require('../config/db');
 const { success, error } = require('../utils/apiResponse');
+const { createSignedDownloadUrls } = require('../config/supabaseStorage');
 
 exports.getInspections = async (req, res) => {
   const { status, inspectorId, ruleConfigVersion, page = 1, limit = 10 } = req.query;
@@ -266,6 +267,13 @@ exports.getReportData = async (req, res) => {
 
   // Filter and shape data for report contract
   const data = result.rows[0];
+
+  // F2: image_references stores permanent storage PATHS, never URLs --
+  // signed URLs expire and a legal record can't be allowed to quietly rot
+  // the moment one does. Sign fresh, short-lived download URLs here, at
+  // the moment the report is actually viewed, rather than ever storing one.
+  const imageUrls = await createSignedDownloadUrls(data.image_references);
+
   res.json(success({
     inspectionId: data.id,
     clientInspectionId: data.client_inspection_id,
@@ -293,7 +301,7 @@ exports.getReportData = async (req, res) => {
       mrpRawText: data.mrp_raw_text
     },
     extractedFields: data.extracted_fields,
-    imageReferences: data.image_references,
+    imageReferences: imageUrls,
     ruleConfigVersion: data.rule_config_version,
     complianceResult: data.compliance_result,
     ruleEngineStatus: data.rule_engine_status,

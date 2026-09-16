@@ -409,8 +409,127 @@ describe('Sync API Integration', () => {
     var check2 = await request(app)
       .get('/api/v1/inspections/' + serverId)
       .set('Authorization', 'Bearer ' + inspectorToken);
-    expect(check2.body.data.product_name).toEqual('F1 Update Test Product Renamed');
+        expect(check2.body.data.product_name).toEqual('F1 Update Test Product Renamed');
     expect(check2.body.data.rule_engine_status).toEqual('EVALUATED');
     expect(check2.body.data.compliance_result.verdict).toEqual('NON_COMPLIANT');
+  });
+
+  // F2 (architecture B): imageReferences must be real storage paths from
+  // POST /photos/upload-url -- never raw bytes, never a URL.
+  it('F2: accepts a real storage path in imageReferences and stores it', async () => {
+    var uploadUrlRes = await request(app)
+      .post('/api/v1/photos/upload-url')
+      .set('Authorization', 'Bearer ' + inspectorToken);
+    var realPath = uploadUrlRes.body.data.path;
+
+    var res = await request(app)
+      .post('/api/v1/sync/inspections')
+      .set('Authorization', 'Bearer ' + inspectorToken)
+      .send({
+        idempotencyKey: crypto.randomUUID(),
+        items: [{
+          clientInspectionId: crypto.randomUUID(),
+          operation: 'CREATE',
+          clientUpdatedAt: fixedTimestamp,
+          ruleConfigVersion: ruleConfigVersion,
+          payload: { productName: 'F2 Real Path Test Product', imageReferences: [realPath] }
+        }]
+      });
+
+    expect(res.statusCode).toEqual(200);
+    expect(res.body.data.results[0].status).toEqual('SYNCED');
+
+    var check = await request(app)
+      .get('/api/v1/inspections/' + res.body.data.results[0].serverId)
+      .set('Authorization', 'Bearer ' + inspectorToken);
+    expect(check.body.data.image_references).toEqual([realPath]);
+  });
+
+  it('F2: rejects raw base64 image data in imageReferences with a clean 400', async () => {
+    var res = await request(app)
+      .post('/api/v1/sync/inspections')
+      .set('Authorization', 'Bearer ' + inspectorToken)
+      .send({
+        idempotencyKey: crypto.randomUUID(),
+        items: [{
+          clientInspectionId: crypto.randomUUID(),
+          operation: 'CREATE',
+          clientUpdatedAt: fixedTimestamp,
+          ruleConfigVersion: ruleConfigVersion,
+          payload: { imageReferences: ['data:image/jpeg;base64,AAAA'] }
+        }]
+      });
+
+    expect(res.statusCode).toEqual(400);
+  });
+
+  it('F2: rejects the old {url, type} reference shape with a clean 400', async () => {
+    var res = await request(app)
+      .post('/api/v1/sync/inspections')
+      .set('Authorization', 'Bearer ' + inspectorToken)
+      .send({
+        idempotencyKey: crypto.randomUUID(),
+        items: [{
+          clientInspectionId: crypto.randomUUID(),
+          operation: 'CREATE',
+          clientUpdatedAt: fixedTimestamp,
+          ruleConfigVersion: ruleConfigVersion,
+          payload: { imageReferences: [{ url: 'https://example.com/photo.jpg', type: 'front_panel' }] }
+        }]
+      });
+
+    expect(res.statusCode).toEqual(400);
+  });
+
+  it('F2: rejects more than 20 images on one item with a clean 400', async () => {
+    var tooMany = Array(21).fill('33333333-3333-3333-3333-333333333333/44444444-4444-4444-4444-444444444444.jpg');
+
+    var res = await request(app)
+      .post('/api/v1/sync/inspections')
+      .set('Authorization', 'Bearer ' + inspectorToken)
+      .send({
+        idempotencyKey: crypto.randomUUID(),
+        items: [{
+          clientInspectionId: crypto.randomUUID(),
+          operation: 'CREATE',
+          clientUpdatedAt: fixedTimestamp,
+          ruleConfigVersion: ruleConfigVersion,
+          payload: { imageReferences: tooMany }
+        }]
+      });
+
+    expect(res.statusCode).toEqual(400);
+  });
+
+  it('F2: report-data returns signed download URLs, never the raw stored path', async () => {
+    var uploadUrlRes = await request(app)
+      .post('/api/v1/photos/upload-url')
+      .set('Authorization', 'Bearer ' + inspectorToken);
+    var realPath = uploadUrlRes.body.data.path;
+
+    var createRes = await request(app)
+      .post('/api/v1/sync/inspections')
+      .set('Authorization', 'Bearer ' + inspectorToken)
+      .send({
+        idempotencyKey: crypto.randomUUID(),
+        items: [{
+          clientInspectionId: crypto.randomUUID(),
+          operation: 'CREATE',
+          clientUpdatedAt: fixedTimestamp,
+          ruleConfigVersion: ruleConfigVersion,
+          payload: { productName: 'F2 Report Data Test', imageReferences: [realPath] }
+        }]
+      });
+    var serverId = createRes.body.data.results[0].serverId;
+
+    var report = await request(app)
+      .get('/api/v1/inspections/' + serverId + '/report-data')
+      .set('Authorization', 'Bearer ' + inspectorToken);
+
+    expect(report.statusCode).toEqual(200);
+    expect(report.body.data.imageReferences).toHaveLength(1);
+    expect(report.body.data.imageReferences[0]).not.toEqual(realPath);
+    expect(report.body.data.imageReferences[0]).toEqual(expect.stringContaining('mock.supabase.co'));
+    expect(report.body.data.imageReferences[0]).toEqual(expect.stringContaining(realPath));
   });
 });

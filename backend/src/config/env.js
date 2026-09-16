@@ -3,7 +3,7 @@ const dotenv = require('dotenv');
 // Load environment variables from .env file if it exists
 dotenv.config();
 
-const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET'];
+const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET', 'SUPABASE_URL', 'SUPABASE_SECRET_KEY', 'SUPABASE_STORAGE_BUCKET'];
 
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
@@ -27,4 +27,13 @@ module.exports = {
   bcryptSaltRounds: parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10),
   maxJsonBodySize: process.env.MAX_JSON_BODY_SIZE || '10mb',
   logLevel: process.env.LOG_LEVEL || 'info',
+  // F2: real photo storage. SUPABASE_SECRET_KEY is what Supabase's current
+  // dashboard calls a "secret" key (sb_secret_...) -- functionally the same
+  // full-access, backend-only key that used to be called "service_role".
+  // Never expose this to any frontend.
+  supabase: {
+    url: process.env.SUPABASE_URL,
+    secretKey: process.env.SUPABASE_SECRET_KEY,
+    bucket: process.env.SUPABASE_STORAGE_BUCKET,
+  },
 };

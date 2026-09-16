@@ -20,6 +20,9 @@ Authenticated endpoints require a valid JWT passed in the header: `Authorization
 ## Sync
 - `POST /sync/inspections` : Offline-first synchronization endpoint. See `INTEGRATION_CONTRACTS.md`. (Requires INSPECTOR or ADMIN)
 
+## Photos
+- `POST /photos/upload-url` : Issue a one-time signed URL for uploading a single photo directly to Supabase Storage, plus the permanent storage path to send back in `imageReferences` (see `INTEGRATION_READINESS.md` for the full F2 contract). (Requires INSPECTOR or ADMIN)
+
 ## Inspections
 - `GET /inspections` : List inspections with pagination. (Requires Auth)
 - `GET /inspections/:id` : Get single inspection details. (Requires Auth)

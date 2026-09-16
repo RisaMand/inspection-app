@@ -11,6 +11,7 @@
     "seed": "node db/seeds/run-seeds.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",

@@ -1,5 +1,22 @@
 const { z } = require('zod');
 
+// F2, architecture B: the client uploads photo bytes directly to Supabase
+// Storage (via photo.controller.js's signed upload URL) and only ever
+// sends back the storage PATH here, never the image bytes or a base64
+// blob. A real path always looks like <inspectorUuid>/<photoUuid>.jpg --
+// generatePhotoPath() in config/supabaseStorage.js is the only thing that
+// ever mints one, so this validates that exact shape rather than z.any()
+// silently accepting anything (including the old {url,type} contract, or
+// raw base64, neither of which describe reality anymore).
+const UUID_RE = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const PHOTO_PATH_RE = new RegExp(`^${UUID_RE}\\/${UUID_RE}\\.jpg$`, 'i');
+const MAX_IMAGES_PER_ITEM = 20; // sanity ceiling against a malformed/malicious payload, well above the frontend's own 7-photo UX nudge (a different, advisory limit)
+
+const imageReferencesSchema = z.array(
+  z.string().regex(PHOTO_PATH_RE, { message: 'Each image reference must be a real storage path (<inspectorId>/<photoId>.jpg) returned by POST /photos/upload-url, not raw image data or a URL' })
+).max(MAX_IMAGES_PER_ITEM).optional().default([]);
+exports.imageReferencesSchema = imageReferencesSchema;
+
 // Same shape as attachComplianceResultSchema's `result` field
 // (inspection.validator.js) -- kept in sync deliberately, not re-derived,
 // since this is the one real contract Rule Engine's output has to match
@@ -42,7 +59,7 @@ const createItemSchema = z.object({
     expiryDate: z.string().optional().nullable(),
     customerCareDetails: z.string().optional().nullable(),
     barcodeValue: z.string().optional().nullable(),
-    imageReferences: z.array(z.any()).optional().default([]),
+    imageReferences: imageReferencesSchema,
     ocrPayload: z.any().optional().nullable(),
     extractedFields: z.any().optional().default({}),
     status: z.enum(['DRAFT', 'PENDING_REVIEW', 'COMPLETED', 'CONFLICTED']).optional(),
@@ -78,7 +95,7 @@ const updateItemSchema = z.object({
     expiryDate: z.string().optional().nullable(),
     customerCareDetails: z.string().optional().nullable(),
     barcodeValue: z.string().optional().nullable(),
-    imageReferences: z.array(z.any()).optional().default([]),
+    imageReferences: imageReferencesSchema,
     ocrPayload: z.any().optional().nullable(),
     extractedFields: z.any().optional().default({}),
     status: z.enum(['DRAFT', 'PENDING_REVIEW', 'COMPLETED', 'CONFLICTED']).optional(),

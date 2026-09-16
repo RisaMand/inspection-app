@@ -99,7 +99,7 @@ All endpoints are prefixed with `/api/v1`.
 - **Backend Responsibility:** The Backend acts exclusively as a storage and retrieval layer for OCR outputs. The backend **does not** run OCR inference, validate confidence scores, or parse raw images.
 - **Contract:** The Frontend/PWA will capture images and process them through the CV/OCR team's pipeline (or the PWA will pass the OCR team's JSON output directly to the backend). 
 - **Storage Fields:** The `sync` and `PATCH` endpoints accept the following unrestricted JSON fields in the inspection payload:
-  - `imageReferences`: `[ { "url": "...", "type": "front_panel" } ]`
+  - `imageReferences`: `[ "33333333-3333-3333-3333-333333333333/9c1e2f3a-....jpg" ]` — real Supabase Storage **paths**, not URLs and not raw image bytes. F2 architecture: the client calls `POST /api/v1/photos/upload-url` (INSPECTOR/ADMIN) first, gets back a one-time signed upload URL, and uploads the actual JPEG bytes straight to Supabase Storage — this backend never touches the image bytes themselves, only issues permission to upload one specific path and validates that the paths coming back in `imageReferences` are real ones it actually issued (`<inspectorId>/<photoId>.jpg`). The bucket is private; `GET /inspections/:id/report-data` signs a fresh, short-lived download URL per path at the moment a report is actually viewed, rather than ever storing a permanent or public link.
   - `ocrPayload`: `{ "rawText": "...", "confidence": 0.9 }`
   - `extractedFields`: `{ "mrp": 50.00, "declaredQuantity": "500ml" }`
 
