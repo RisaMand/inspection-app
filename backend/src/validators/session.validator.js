@@ -19,6 +19,16 @@ const createSessionSchema = z.object({
   }).strict().default({})
 });
 
+// A5: session/product routes had zero param validation -- a malformed ID
+// (e.g. "not-a-real-uuid") reached Postgres raw and threw a 500 (22P02)
+// instead of a clean 400. This schema catches that at the edge.
+const sessionIdParamsSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('id must be a valid UUID')
+  })
+});
+
 module.exports = {
-  createSessionSchema
+  createSessionSchema,
+  sessionIdParamsSchema
 };

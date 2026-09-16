@@ -140,6 +140,18 @@ describe('Sync -> product linkage (no-barcode path, real end-to-end)', () => {
 
 });
 
+describe('Param validation (A5)', () => {
+  it('GET /products/:id/history with a malformed id returns clean 400, not a raw 500', async () => {
+    const res = await request(app)
+      .get('/api/v1/products/not-a-real-uuid/history')
+      .set('Authorization', `Bearer ${inspectorToken}`);
+
+    expect(res.statusCode).toEqual(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toEqual('VALIDATION_ERROR');
+  });
+});
+
 // -----------------------------------------------------------------------
 // NOT COVERED HERE, ON PURPOSE:
 //

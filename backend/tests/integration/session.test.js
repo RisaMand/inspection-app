@@ -322,4 +322,26 @@ describe('Session API Integration', () => {
       expect(res.body.success).toBe(false);
     });
   });
+
+  describe('Param validation (A5)', () => {
+    it('GET /sessions/:id with a malformed id returns clean 400, not a raw 500', async () => {
+      const res = await request(app)
+        .get('/api/v1/sessions/not-a-real-uuid')
+        .set('Authorization', `Bearer ${inspectorToken}`);
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toEqual('VALIDATION_ERROR');
+    });
+
+    it('PATCH /sessions/:id/close with a malformed id returns clean 400, not a raw 500', async () => {
+      const res = await request(app)
+        .patch('/api/v1/sessions/not-a-real-uuid/close')
+        .set('Authorization', `Bearer ${inspectorToken}`);
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toEqual('VALIDATION_ERROR');
+    });
+  });
 });
