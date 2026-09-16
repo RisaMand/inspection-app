@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import checkImage from '../lib/cv/index.js';
+import checkImage, { terminateOCRWorker } from '../lib/cv/index.js';
 import { useNavigate } from 'react-router-dom';
 import { dbPromise } from '../db/db';
 
@@ -133,6 +133,16 @@ export default function Capture({ addItem, session, sessionLoaded }) {
       navigate('/session');
     }
   }, [session, sessionLoaded, navigate]);
+
+  // The OCR worker (ocr.js) is a lazily-created singleton that survives
+  // for as long as it isn't explicitly terminated — same lifecycle
+  // concern as the camera stream above. Release it when leaving this
+  // screen rather than letting it sit in memory for the rest of the tab.
+  useEffect(() => {
+    return () => {
+      terminateOCRWorker();
+    };
+  }, []);
 
   // Restore any in-progress (not-yet-finished) photos after a refresh,
   // scoped to the currently active session — never leaks a previous
