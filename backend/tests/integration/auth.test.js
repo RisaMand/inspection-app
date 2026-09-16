@@ -40,4 +40,18 @@ describe('Auth API Integration', () => {
     expect(res.body.data.user.password_hash).toBeUndefined();
     expect(res.body.data.user.password).toBeUndefined();
   });
+
+  
+  it('rate limits repeated login attempts from the same IP (A7)', async () => {
+    // Fire well past the 10-per-15-min window regardless of how many login
+    // calls the earlier tests in this file already made.
+    let lastRes;
+    for (let i = 0; i < 15; i++) {
+      lastRes = await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email: 'inspector@compliance.local', password: 'wrongpassword' });
+    }
+    expect(lastRes.statusCode).toEqual(429);
+    expect(lastRes.body.error.code).toEqual('RATE_LIMITED');
+  });
 });
