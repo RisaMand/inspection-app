@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { decode } from 'file:///C:/Users/divya/OneDrive/Desktop/inspection-app/inspection-app/node_modules/fast-png/lib/index.js';
+import { decode } from 'fast-png';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pngBytes = readFileSync(path.join(__dirname, 'test-photos', 'image1.png'));
