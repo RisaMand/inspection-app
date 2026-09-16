@@ -73,9 +73,10 @@ exports.syncInspections = async (req, res) => {
               manufacturer_name, manufacturer_address, packer_name, packer_address,
               importer_name, importer_address, declared_quantity, mrp, mrp_raw_text, packed_date, expiry_date,
               customer_care_details, barcode_value, image_references, ocr_payload, extracted_fields,
-              rule_config_version, client_created_at, client_updated_at, product_id
+              rule_config_version, client_created_at, client_updated_at, product_id,
+              compliance_result, rule_engine_status
             ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27
             )
             ON CONFLICT (client_inspection_id) DO NOTHING
             RETURNING id, server_version, updated_at
@@ -88,7 +89,9 @@ exports.syncInspections = async (req, res) => {
             item.payload.customerCareDetails, item.payload.barcodeValue,
             JSON.stringify(item.payload.imageReferences), JSON.stringify(item.payload.ocrPayload),
             JSON.stringify(item.payload.extractedFields), item.ruleConfigVersion,
-            item.clientUpdatedAt, item.clientUpdatedAt, product.id
+            item.clientUpdatedAt, item.clientUpdatedAt, product.id,
+            item.payload.complianceResult ? JSON.stringify(item.payload.complianceResult) : null,
+            item.payload.complianceResult ? (item.payload.complianceStatus || 'EVALUATED') : 'NOT_EVALUATED'
           ]);
 
           if (insertRes.rows.length > 0) {
@@ -206,9 +209,10 @@ exports.syncInspections = async (req, res) => {
                 importer_name = $8, importer_address = $9, declared_quantity = $10,
                 mrp = $11, mrp_raw_text = $12, packed_date = $13, expiry_date = $14, customer_care_details = $15,
                 barcode_value = $16, image_references = $17, ocr_payload = $18,
-                extracted_fields = $19, product_id = $20, client_updated_at = $21, server_version = server_version + 1,
+                extracted_fields = $19, product_id = $20, client_updated_at = $21,
+                compliance_result = $22, rule_engine_status = $23, server_version = server_version + 1,
                 synced_at = NOW(), updated_at = NOW()
-              WHERE id = $22 AND server_version = $23
+              WHERE id = $24 AND server_version = $25
               RETURNING server_version, updated_at
             `, [
               newStatus,
@@ -232,6 +236,8 @@ exports.syncInspections = async (req, res) => {
               item.payload.extractedFields !== undefined ? JSON.stringify(item.payload.extractedFields) : serverRecord.extracted_fields,
               productId,
               item.clientUpdatedAt,
+              item.payload.complianceResult !== undefined ? JSON.stringify(item.payload.complianceResult) : serverRecord.compliance_result,
+              item.payload.complianceResult !== undefined ? (item.payload.complianceStatus || 'EVALUATED') : serverRecord.rule_engine_status,
               serverRecord.id,
               item.baseServerVersion
             ]);

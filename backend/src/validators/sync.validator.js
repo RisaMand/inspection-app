@@ -1,5 +1,24 @@
 const { z } = require('zod');
 
+// Same shape as attachComplianceResultSchema's `result` field
+// (inspection.validator.js) -- kept in sync deliberately, not re-derived,
+// since this is the one real contract Rule Engine's output has to match
+// wherever it lands, whether via the standalone attach endpoint or here.
+const complianceResultSchema = z.object({
+  verdict: z.enum(['COMPLIANT', 'COMPLIANT_WITH_WARNINGS', 'NON_COMPLIANT', 'ERROR']),
+  totalRules: z.number().int(),
+  passedRules: z.number().int(),
+  failedRules: z.number().int(),
+  skippedRules: z.number().int(),
+  failures: z.array(z.object({
+    rule_id: z.string(),
+    reason: z.string(),
+    severity: z.enum(['cosmetic', 'substantive']),
+    clause_citation: z.string(),
+    confidence: z.number()
+  }))
+}).passthrough();
+
 // Discriminated union: CREATE doesn't require baseServerVersion, UPDATE/SUBMIT do
 const createItemSchema = z.object({
   clientInspectionId: z.string().uuid(),
@@ -28,6 +47,12 @@ const createItemSchema = z.object({
     extractedFields: z.any().optional().default({}),
     status: z.enum(['DRAFT', 'PENDING_REVIEW', 'COMPLETED', 'CONFLICTED']).optional(),
     mrpRawText: z.string().optional().nullable(),
+    // F1: the client's on-device Rule Engine already computed a verdict
+    // before this item was ever queued for sync (pipeline step 7, before
+    // step 9's save) -- this accepts that object as-is rather than
+    // triggering any server-side evaluation, since none exists.
+    complianceStatus: z.enum(['EVALUATED', 'FAILED']).optional(),
+    complianceResult: complianceResultSchema.optional(),
   })
 });
 
@@ -58,6 +83,8 @@ const updateItemSchema = z.object({
     extractedFields: z.any().optional().default({}),
     status: z.enum(['DRAFT', 'PENDING_REVIEW', 'COMPLETED', 'CONFLICTED']).optional(),
     mrpRawText: z.string().optional().nullable(),
+    complianceStatus: z.enum(['EVALUATED', 'FAILED']).optional(),
+    complianceResult: complianceResultSchema.optional(),
   })
 });
 
