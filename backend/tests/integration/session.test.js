@@ -23,7 +23,7 @@ describe('Session API Integration', () => {
         .post('/api/v1/sessions')
         .set('Authorization', `Bearer ${inspectorToken}`)
         .send({});
-      
+
       expect(res.statusCode).toEqual(201);
       expect(res.body.success).toBe(true);
       expect(res.body.data.id).toBeDefined();
@@ -45,7 +45,7 @@ describe('Session API Integration', () => {
           gps_lat: 28.6139,
           gps_lng: 77.2090
         });
-      
+
       expect(res.statusCode).toEqual(201);
       expect(res.body.success).toBe(true);
       expect(res.body.data.visit_number).toEqual('VIS-2026-001');
@@ -61,7 +61,7 @@ describe('Session API Integration', () => {
         .send({
           visit_number: 'VIS-2026-002'
         });
-      
+
       expect(res.statusCode).toEqual(201);
       expect(res.body.data.visit_number).toEqual('VIS-2026-002');
       expect(res.body.data.shop_number).toBeNull();
@@ -75,7 +75,7 @@ describe('Session API Integration', () => {
           gps_lat: -33.8688,
           gps_lng: 151.2093
         });
-      
+
       expect(res.statusCode).toEqual(201);
       expect(res.body.data.gps_lat).toBeCloseTo(-33.8688, 4);
       expect(res.body.data.gps_lng).toBeCloseTo(151.2093, 4);
@@ -88,7 +88,7 @@ describe('Session API Integration', () => {
         .send({
           visit_number: 'A'.repeat(51)
         });
-      
+
       expect(res.statusCode).toEqual(400);
       expect(res.body.success).toBe(false);
       expect(res.body.error.code).toEqual('VALIDATION_ERROR');
@@ -101,7 +101,7 @@ describe('Session API Integration', () => {
         .send({
           shop_number: 'B'.repeat(51)
         });
-      
+
       expect(res.statusCode).toEqual(400);
       expect(res.body.success).toBe(false);
       expect(res.body.error.code).toEqual('VALIDATION_ERROR');
@@ -115,7 +115,7 @@ describe('Session API Integration', () => {
           gps_lat: -91,
           gps_lng: 0
         });
-      
+
       expect(res.statusCode).toEqual(400);
       expect(res.body.success).toBe(false);
       expect(res.body.error.code).toEqual('VALIDATION_ERROR');
@@ -129,7 +129,7 @@ describe('Session API Integration', () => {
           gps_lat: 91,
           gps_lng: 0
         });
-      
+
       expect(res.statusCode).toEqual(400);
       expect(res.body.success).toBe(false);
       expect(res.body.error.code).toEqual('VALIDATION_ERROR');
@@ -143,7 +143,7 @@ describe('Session API Integration', () => {
           gps_lat: 0,
           gps_lng: -181
         });
-      
+
       expect(res.statusCode).toEqual(400);
       expect(res.body.success).toBe(false);
       expect(res.body.error.code).toEqual('VALIDATION_ERROR');
@@ -157,7 +157,7 @@ describe('Session API Integration', () => {
           gps_lat: 0,
           gps_lng: 181
         });
-      
+
       expect(res.statusCode).toEqual(400);
       expect(res.body.success).toBe(false);
       expect(res.body.error.code).toEqual('VALIDATION_ERROR');
@@ -171,7 +171,7 @@ describe('Session API Integration', () => {
           gps_lat: -90,
           gps_lng: -180
         });
-      
+
       expect(res.statusCode).toEqual(201);
       expect(res.body.data.gps_lat).toBeCloseTo(-90, 1);
       expect(res.body.data.gps_lng).toBeCloseTo(-180, 1);
@@ -185,7 +185,7 @@ describe('Session API Integration', () => {
           gps_lat: 'invalid',
           gps_lng: 0
         });
-      
+
       expect(res.statusCode).toEqual(400);
       expect(res.body.success).toBe(false);
       expect(res.body.error.code).toEqual('VALIDATION_ERROR');
@@ -199,7 +199,7 @@ describe('Session API Integration', () => {
           visit_number: 'VIS-001',
           extra_field: 'should fail'
         });
-      
+
       expect(res.statusCode).toEqual(400);
       expect(res.body.success).toBe(false);
       expect(res.body.error.code).toEqual('VALIDATION_ERROR');
@@ -209,7 +209,7 @@ describe('Session API Integration', () => {
       const res = await request(app)
         .post('/api/v1/sessions')
         .send({});
-      
+
       expect(res.statusCode).toEqual(401);
     });
   });
@@ -226,13 +226,13 @@ describe('Session API Integration', () => {
           gps_lat: 40.7128,
           gps_lng: -74.0060
         });
-      
+
       const sessionId = createRes.body.data.id;
-      
+
       const res = await request(app)
         .get(`/api/v1/sessions/${sessionId}`)
         .set('Authorization', `Bearer ${inspectorToken}`);
-      
+
       expect(res.statusCode).toEqual(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data.visit_number).toEqual('VIS-2026-100');
@@ -241,26 +241,82 @@ describe('Session API Integration', () => {
       expect(res.body.data.gps_lng).toBeCloseTo(-74.0060, 4);
     });
 
+    it('Returns linked inspections as items (Closeout Step 4)', async () => {
+      const createRes = await request(app)
+        .post('/api/v1/sessions')
+        .set('Authorization', `Bearer ${inspectorToken}`)
+        .send({ visit_number: 'VIS-2026-300', shop_number: 'SHOP-777' });
+
+      const sessionId = createRes.body.data.id;
+
+      const syncRes = await request(app)
+        .post('/api/v1/sync/inspections')
+        .set('Authorization', `Bearer ${inspectorToken}`)
+        .send({
+          idempotencyKey: require('crypto').randomUUID(),
+          items: [
+            {
+              clientInspectionId: require('crypto').randomUUID(),
+              operation: 'CREATE',
+              clientUpdatedAt: '2026-01-01T00:00:00.000Z',
+              ruleConfigVersion: 'LMR-2011-v1',
+              payload: {
+                productName: 'Session-Linked Product',
+                sessionId: sessionId,
+              },
+            },
+          ],
+        });
+
+      expect(syncRes.statusCode).toEqual(200);
+      expect(syncRes.body.data.results[0].status).toEqual('SYNCED');
+
+      const res = await request(app)
+        .get(`/api/v1/sessions/${sessionId}`)
+        .set('Authorization', `Bearer ${inspectorToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(Array.isArray(res.body.data.items)).toBe(true);
+      const linked = res.body.data.items.find((i) => i.product_name === 'Session-Linked Product');
+      expect(linked).toBeDefined();
+    });
+
+    it('Returns an empty items array for a session with no inspections yet', async () => {
+      const createRes = await request(app)
+        .post('/api/v1/sessions')
+        .set('Authorization', `Bearer ${inspectorToken}`)
+        .send({});
+
+      const sessionId = createRes.body.data.id;
+
+      const res = await request(app)
+        .get(`/api/v1/sessions/${sessionId}`)
+        .set('Authorization', `Bearer ${inspectorToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.data.items).toEqual([]);
+    });
+
     it('Enforces ownership isolation', async () => {
       // Get another inspector token
       const loginRes = await request(app)
         .post('/api/v1/auth/login')
         .send({ email: 'inspector2@compliance.local', password: 'password123' });
       const inspector2Token = loginRes.body.data.token;
-      
+
       // Create session with inspector1
       const createRes = await request(app)
         .post('/api/v1/sessions')
         .set('Authorization', `Bearer ${inspectorToken}`)
         .send({});
-      
+
       const sessionId = createRes.body.data.id;
-      
+
       // Try to access with inspector2
       const res = await request(app)
         .get(`/api/v1/sessions/${sessionId}`)
         .set('Authorization', `Bearer ${inspector2Token}`);
-      
+
       expect(res.statusCode).toEqual(403);
       expect(res.body.success).toBe(false);
     });
@@ -276,24 +332,24 @@ describe('Session API Integration', () => {
           visit_number: 'VIS-2026-200',
           shop_number: 'SHOP-888'
         });
-      
+
       const sessionId = createRes.body.data.id;
-      
+
       // Close it
       const closeRes = await request(app)
         .patch(`/api/v1/sessions/${sessionId}/close`)
         .set('Authorization', `Bearer ${inspectorToken}`);
-      
+
       expect(closeRes.statusCode).toEqual(200);
       expect(closeRes.body.success).toBe(true);
       expect(closeRes.body.data.status).toEqual('CLOSED');
       expect(closeRes.body.data.end_time).toBeDefined();
-      
+
       // Verify visit data preserved
       const getRes = await request(app)
         .get(`/api/v1/sessions/${sessionId}`)
         .set('Authorization', `Bearer ${inspectorToken}`);
-      
+
       expect(getRes.body.data.visit_number).toEqual('VIS-2026-200');
       expect(getRes.body.data.shop_number).toEqual('SHOP-888');
     });
@@ -304,20 +360,20 @@ describe('Session API Integration', () => {
         .post('/api/v1/auth/login')
         .send({ email: 'inspector2@compliance.local', password: 'password123' });
       const inspector2Token = loginRes.body.data.token;
-      
+
       // Create session with inspector1
       const createRes = await request(app)
         .post('/api/v1/sessions')
         .set('Authorization', `Bearer ${inspectorToken}`)
         .send({});
-      
+
       const sessionId = createRes.body.data.id;
-      
+
       // Try to close with inspector2
       const res = await request(app)
         .patch(`/api/v1/sessions/${sessionId}/close`)
         .set('Authorization', `Bearer ${inspector2Token}`);
-      
+
       expect(res.statusCode).toEqual(403);
       expect(res.body.success).toBe(false);
     });

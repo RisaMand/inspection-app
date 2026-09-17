@@ -25,7 +25,7 @@ exports.getSession = async (req, res) => {
   const inspectorId = req.user.sub;
 
   const result = await pool.query('SELECT * FROM sessions WHERE id = $1', [id]);
-  
+
   if (result.rows.length === 0) {
     return res.status(404).json(error('NOT_FOUND', 'Session not found', [], req.id));
   }
@@ -34,7 +34,17 @@ exports.getSession = async (req, res) => {
     return res.status(403).json(error('FORBIDDEN', 'Access denied', [], req.id));
   }
 
-  res.json(success(result.rows[0]));
+  // Closeout Step 4: a session is a visit -- "get one session" is expected
+  // to mean "with its items" (Team Build Bible), not just the bare visit
+  // metadata. inspections.session_id is a nullable FK, so this is a
+  // follow-up query rather than a join, matching how product_id is
+  // already resolved separately in the sync flow.
+  const itemsRes = await pool.query(
+    'SELECT id, status, product_name, brand_name, updated_at FROM inspections WHERE session_id = $1 ORDER BY updated_at DESC',
+    [id]
+  );
+
+  res.json(success({ ...result.rows[0], items: itemsRes.rows }));
 };
 
 exports.closeSession = async (req, res) => {

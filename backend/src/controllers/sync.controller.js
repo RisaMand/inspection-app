@@ -74,9 +74,9 @@ exports.syncInspections = async (req, res) => {
               importer_name, importer_address, declared_quantity, mrp, mrp_raw_text, packed_date, expiry_date,
               customer_care_details, barcode_value, image_references, ocr_payload, extracted_fields,
               rule_config_version, client_created_at, client_updated_at, product_id,
-              compliance_result, rule_engine_status
+              compliance_result, rule_engine_status, session_id
             ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
             )
             ON CONFLICT (client_inspection_id) DO NOTHING
             RETURNING id, server_version, updated_at
@@ -91,7 +91,8 @@ exports.syncInspections = async (req, res) => {
             JSON.stringify(item.payload.extractedFields), item.ruleConfigVersion,
             item.clientUpdatedAt, item.clientUpdatedAt, product.id,
             item.payload.complianceResult ? JSON.stringify(item.payload.complianceResult) : null,
-            item.payload.complianceResult ? (item.payload.complianceStatus || 'EVALUATED') : 'NOT_EVALUATED'
+            item.payload.complianceResult ? (item.payload.complianceStatus || 'EVALUATED') : 'NOT_EVALUATED',
+            item.payload.sessionId || null
           ]);
 
           if (insertRes.rows.length > 0) {

@@ -64,6 +64,11 @@ const createItemSchema = z.object({
     extractedFields: z.any().optional().default({}),
     status: z.enum(['DRAFT', 'PENDING_REVIEW', 'COMPLETED', 'CONFLICTED']).optional(),
     mrpRawText: z.string().optional().nullable(),
+    // Closeout Step 4: which visit (session) this capture belongs to.
+    // Optional/nullable because older or offline-first clients may not
+    // send one yet -- an inspection without a session is still valid,
+    // just not traceable back to a visit server-side.
+    sessionId: z.string().uuid().optional().nullable(),
     // F1: the client's on-device Rule Engine already computed a verdict
     // before this item was ever queued for sync (pipeline step 7, before
     // step 9's save) -- this accepts that object as-is rather than
@@ -100,6 +105,7 @@ const updateItemSchema = z.object({
     extractedFields: z.any().optional().default({}),
     status: z.enum(['DRAFT', 'PENDING_REVIEW', 'COMPLETED', 'CONFLICTED']).optional(),
     mrpRawText: z.string().optional().nullable(),
+    sessionId: z.string().uuid().optional().nullable(),
     complianceStatus: z.enum(['EVALUATED', 'FAILED']).optional(),
     complianceResult: complianceResultSchema.optional(),
   })
