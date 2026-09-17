@@ -1,18 +1,72 @@
 const { pool } = require('../config/db');
-const { success } = require('../utils/apiResponse');
+const { success, error } = require('../utils/apiResponse');
 
 exports.getSummary = async (req, res) => {
-  const [totalRes, statusRes, ruleConfigRes, recentRes, complianceRes] = await Promise.all([
-    pool.query('SELECT COUNT(*) FROM inspections'),
-    pool.query('SELECT status, COUNT(*) FROM inspections GROUP BY status'),
-    pool.query('SELECT rule_config_version, COUNT(*) FROM inspections GROUP BY rule_config_version'),
-    pool.query('SELECT id, client_inspection_id, status, updated_at FROM inspections ORDER BY updated_at DESC LIMIT 5'),
+  const { from, to } = req.query;
+
+  // Closeout Step 6: optional time-window scoping, plus real trending.
+  // Scoped to `created_at` (this row's real server-insert time), not
+  // `client_created_at` -- the CREATE branch in sync.controller.js writes
+  // client_created_at == client_updated_at for every row today (both
+  // sourced from the same item.clientUpdatedAt), so that column can't
+  // yet distinguish "captured" from "last touched" either. created_at is
+  // the one timestamp guaranteed to reflect this row's real position in
+  // time, so it's the honest choice until client_created_at means
+  // something different from client_updated_at.
+  let fromDate = null;
+  let toDate = null;
+  if (from !== undefined) {
+    fromDate = new Date(from);
+    if (isNaN(fromDate.getTime())) {
+      return res.status(400).json(error('VALIDATION_ERROR', 'Invalid `from` date', [{ path: 'from', message: 'Must be a valid ISO date string' }], req.id));
+    }
+  }
+  if (to !== undefined) {
+    toDate = new Date(to);
+    if (isNaN(toDate.getTime())) {
+      return res.status(400).json(error('VALIDATION_ERROR', 'Invalid `to` date', [{ path: 'to', message: 'Must be a valid ISO date string' }], req.id));
+    }
+  }
+
+  const windowParams = [];
+  const windowConditions = [];
+  if (fromDate) {
+    windowParams.push(fromDate.toISOString());
+    windowConditions.push(`created_at >= $${windowParams.length}`);
+  }
+  if (toDate) {
+    windowParams.push(toDate.toISOString());
+    windowConditions.push(`created_at <= $${windowParams.length}`);
+  }
+
+  // Builds a WHERE clause combining the shared time-window conditions
+  // (already bound to windowParams above) with any extra static
+  // conditions a given query needs -- keeps every aggregate below
+  // scoped to the same window without repeating the from/to logic.
+  const whereWith = (...extra) => {
+    const all = [...windowConditions, ...extra];
+    return all.length > 0 ? `WHERE ${all.join(' AND ')}` : '';
+  };
+
+  const [totalRes, statusRes, ruleConfigRes, recentRes, complianceRes, trendingRes] = await Promise.all([
+    pool.query(`SELECT COUNT(*) FROM inspections ${whereWith()}`, windowParams),
+    pool.query(`SELECT status, COUNT(*) FROM inspections ${whereWith()} GROUP BY status`, windowParams),
+    pool.query(`SELECT rule_config_version, COUNT(*) FROM inspections ${whereWith()} GROUP BY rule_config_version`, windowParams),
+    pool.query(`SELECT id, client_inspection_id, status, updated_at FROM inspections ${whereWith()} ORDER BY updated_at DESC LIMIT 5`, windowParams),
     pool.query(`
-      SELECT compliance_result->>'verdict' as verdict, COUNT(*) 
-      FROM inspections 
-      WHERE compliance_result IS NOT NULL 
+      SELECT compliance_result->>'verdict' as verdict, COUNT(*)
+      FROM inspections
+      ${whereWith(`compliance_result IS NOT NULL`)}
       GROUP BY compliance_result->>'verdict'
-    `)
+    `, windowParams),
+    // Trending non-compliance types over the window -- same JS-side
+    // unnesting as getViolations below, for the same reason (pg-mem
+    // can't resolve an outer-table column inside a LATERAL join).
+    pool.query(`
+      SELECT compliance_result
+      FROM inspections
+      ${whereWith(`rule_engine_status = 'EVALUATED'`, `compliance_result IS NOT NULL`)}
+    `, windowParams)
   ]);
 
   const summary = {
@@ -23,7 +77,8 @@ exports.getSummary = async (req, res) => {
     compliant: 0,
     conflicted: 0,
     byRuleConfigVersion: ruleConfigRes.rows.map(r => ({ version: r.rule_config_version, count: parseInt(r.count, 10) })),
-    recentInspections: recentRes.rows
+    recentInspections: recentRes.rows,
+    window: { from: fromDate ? fromDate.toISOString() : null, to: toDate ? toDate.toISOString() : null },
   };
 
   statusRes.rows.forEach(r => {
@@ -36,6 +91,24 @@ exports.getSummary = async (req, res) => {
     if (r.verdict === 'NON_COMPLIANT' || r.verdict === 'ERROR') summary.nonCompliant += parseInt(r.count, 10);
     if (r.verdict === 'COMPLIANT' || r.verdict === 'COMPLIANT_WITH_WARNINGS') summary.compliant += parseInt(r.count, 10);
   });
+
+  const trendingMap = new Map();
+  for (const row of trendingRes.rows) {
+    const failures = row.compliance_result?.failures || [];
+    for (const f of failures) {
+      if (!trendingMap.has(f.rule_id)) {
+        trendingMap.set(f.rule_id, {
+          ruleId: f.rule_id,
+          severity: f.severity,
+          clauseCitation: f.clause_citation,
+          reason: f.reason,
+          count: 0,
+        });
+      }
+      trendingMap.get(f.rule_id).count += 1;
+    }
+  }
+  summary.trending = [...trendingMap.values()].sort((a, b) => b.count - a.count);
 
   res.json(success(summary));
 };
