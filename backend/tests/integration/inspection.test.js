@@ -126,30 +126,46 @@ describe('Inspection API Integration', () => {
     expect(res.statusCode).toEqual(400);
   });
 
-  it('Report data includes all Legal Metrology fields', async () => {
+    it('Report data includes all Legal Metrology fields', async () => {
     // Create inspection with all fields populated
     const crypto = require('crypto');
     const fullInspectionId = crypto.randomUUID();
     const clientInspectionId = crypto.randomUUID();
+    const sessionId = crypto.randomUUID();
+
+    // BE fix: getReportData never joined sessions, so GPS/visit-number/
+    // shop-number never reached a server-rendered report even though
+    // inspections.session_id has been populated since Closeout Step 4.
+    await pool.query(`
+      INSERT INTO sessions (id, inspector_id, visit_number, shop_number, gps_lat, gps_lng, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [
+      sessionId, '33333333-3333-3333-3333-333333333333',
+      'V-2026-0042', 'SHOP-17', 19.076090, 72.877426, 'CLOSED'
+    ]);
 
     await pool.query(`
       INSERT INTO inspections (
         id, client_inspection_id, inspector_id, rule_config_version, status,
+        session_id,
         product_name, brand_name, manufacturer_name, manufacturer_address,
         packer_name, packer_address, importer_name, importer_address,
+        marketed_by_name, marketed_by_address,
         declared_quantity, mrp, mrp_raw_text, packed_date, expiry_date,
         customer_care_details, barcode_value, client_updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24
       )
     `, [
       fullInspectionId, clientInspectionId,
       '33333333-3333-3333-3333-333333333333', // inspector id
       testRuleConfigVersion, 'COMPLETED',
+      sessionId,
       'Test Product', 'Test Brand',
       'Test Manufacturer', '123 Manufacturer St',
       'Test Packer', '456 Packer Ave',
       'Test Importer', '789 Importer Rd',
+      'Test Marketer', '321 Marketer Blvd',
       '500ml', 99.99, 'MRP Rs. 99.99',
       '2025-01-01', '2026-12-31',
       'Call 1800-XXX-XXXX', 'BAR123456',
@@ -173,12 +189,40 @@ describe('Inspection API Integration', () => {
     expect(capturedData.packerAddress).toEqual('456 Packer Ave');
     expect(capturedData.importerName).toEqual('Test Importer');
     expect(capturedData.importerAddress).toEqual('789 Importer Rd');
+    expect(capturedData.marketedByName).toEqual('Test Marketer');
+    expect(capturedData.marketedByAddress).toEqual('321 Marketer Blvd');
     expect(capturedData.declaredQuantity).toEqual('500ml');
     expect(capturedData.mrp).toEqual('99.99');
     expect(capturedData.mrpRawText).toEqual('MRP Rs. 99.99');
     expect(capturedData.expiryDate).toBeDefined();
     expect(capturedData.customerCareDetails).toEqual('Call 1800-XXX-XXXX');
     expect(capturedData.barcodeValue).toEqual('BAR123456');
+
+    // Verify visit/GPS context now reaches the report via the session join
+    const visit = res.body.data.visit;
+    expect(visit.visitNumber).toEqual('V-2026-0042');
+    expect(visit.shopNumber).toEqual('SHOP-17');
+    expect(Number(visit.gpsLat)).toBeCloseTo(19.076090, 5);
+    expect(Number(visit.gpsLng)).toBeCloseTo(72.877426, 5);
+  });
+
+  it('Report data still works for inspections with no session_id (pre-Step-4 rows)', async () => {
+    const crypto = require('crypto');
+    const noSessionId = crypto.randomUUID();
+
+    await pool.query(
+      'INSERT INTO inspections (id, client_inspection_id, inspector_id, rule_config_version, status, client_updated_at) VALUES ($1, $1, $2, $3, $4, $5)',
+      [noSessionId, '33333333-3333-3333-3333-333333333333', testRuleConfigVersion, 'DRAFT', '2026-01-01T00:00:00Z']
+    );
+
+    var res = await request(app)
+      .get('/api/v1/inspections/' + noSessionId + '/report-data')
+      .set('Authorization', 'Bearer ' + inspectorToken);
+
+    expect(res.statusCode).toEqual(200);
+    expect(res.body.data.visit).toEqual({
+      visitNumber: null, shopNumber: null, gpsLat: null, gpsLng: null
+    });
   });
 
   it('PATCH can set mrp_raw_text (A6)', async () => {
@@ -195,7 +239,26 @@ describe('Inspection API Integration', () => {
       .send({ server_version: 1, mrp_raw_text: 'MRP Rs. 149.00 (incl. of all taxes)' });
 
     expect(res.statusCode).toEqual(200);
-    expect(res.body.data.mrp_raw_text).toEqual('MRP Rs. 149.00 (incl. of all taxes)');
+        expect(res.body.data.mrp_raw_text).toEqual('MRP Rs. 149.00 (incl. of all taxes)');
+    expect(res.body.data.server_version).toEqual(2);
+  });
+
+  it('PATCH can set marketed_by_name/marketed_by_address (BE Item 2)', async () => {
+    const crypto = require('crypto');
+    const id = crypto.randomUUID();
+    await pool.query(
+      'INSERT INTO inspections (id, client_inspection_id, inspector_id, rule_config_version, status, server_version, client_updated_at) VALUES ($1, $1, $2, $3, $4, $5, $6)',
+      [id, '33333333-3333-3333-3333-333333333333', testRuleConfigVersion, 'DRAFT', 1, '2026-01-01T00:00:00Z']
+    );
+
+    var res = await request(app)
+      .patch('/api/v1/inspections/' + id)
+      .set('Authorization', 'Bearer ' + inspectorToken)
+      .send({ server_version: 1, marketed_by_name: 'Gamma Marketing Pvt Ltd', marketed_by_address: '9 Market Rd' });
+
+    expect(res.statusCode).toEqual(200);
+    expect(res.body.data.marketed_by_name).toEqual('Gamma Marketing Pvt Ltd');
+    expect(res.body.data.marketed_by_address).toEqual('9 Market Rd');
     expect(res.body.data.server_version).toEqual(2);
   });
 });

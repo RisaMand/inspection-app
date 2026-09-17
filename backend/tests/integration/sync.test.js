@@ -67,6 +67,61 @@ describe('Sync API Integration', () => {
     expect(res.body.data.results[0].serverId).toBeDefined();
   });
 
+  it('CREATE persists marketedByName/Address, and UPDATE can change them (BE Item 2)', async () => {
+    var clientId = crypto.randomUUID();
+
+    var createRes = await request(app)
+      .post('/api/v1/sync/inspections')
+      .set('Authorization', 'Bearer ' + inspectorToken)
+      .send({
+        idempotencyKey: crypto.randomUUID(),
+        items: [{
+          clientInspectionId: clientId,
+          operation: 'CREATE',
+          clientUpdatedAt: fixedTimestamp,
+          ruleConfigVersion: ruleConfigVersion,
+          payload: {
+            productName: 'Marketed-By Test Product',
+            marketedByName: 'Acme Marketing Co',
+            marketedByAddress: '1 Marketing Plaza, Mumbai'
+          }
+        }]
+      });
+
+    expect(createRes.statusCode).toEqual(200);
+    expect(createRes.body.data.results[0].status).toEqual('SYNCED');
+    var serverId = createRes.body.data.results[0].serverId;
+
+    var afterCreate = await pool.query('SELECT marketed_by_name, marketed_by_address, server_version FROM inspections WHERE id = $1', [serverId]);
+    expect(afterCreate.rows[0].marketed_by_name).toEqual('Acme Marketing Co');
+    expect(afterCreate.rows[0].marketed_by_address).toEqual('1 Marketing Plaza, Mumbai');
+
+    var updateRes = await request(app)
+      .post('/api/v1/sync/inspections')
+      .set('Authorization', 'Bearer ' + inspectorToken)
+      .send({
+        idempotencyKey: crypto.randomUUID(),
+        items: [{
+          clientInspectionId: clientId,
+          serverId: serverId,
+          baseServerVersion: afterCreate.rows[0].server_version,
+          operation: 'UPDATE',
+          clientUpdatedAt: fixedTimestamp,
+          ruleConfigVersion: ruleConfigVersion,
+          payload: { marketedByName: 'Beta Marketing LLP' }
+        }]
+      });
+
+    expect(updateRes.statusCode).toEqual(200);
+    expect(updateRes.body.data.results[0].status).toEqual('SYNCED');
+
+    var afterUpdate = await pool.query('SELECT marketed_by_name, marketed_by_address FROM inspections WHERE id = $1', [serverId]);
+    expect(afterUpdate.rows[0].marketed_by_name).toEqual('Beta Marketing LLP');
+    // Address wasn't in the UPDATE payload -- confirms partial-update preserves
+    // the untouched field rather than nulling it out.
+    expect(afterUpdate.rows[0].marketed_by_address).toEqual('1 Marketing Plaza, Mumbai');
+  });
+
   it('UPDATE without baseServerVersion fails validation', async () => {
     var res = await request(app)
       .post('/api/v1/sync/inspections')
