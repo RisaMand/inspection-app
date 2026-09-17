@@ -78,16 +78,49 @@ exports.searchDashboard = async (req, res) => {
 };
 
 exports.getViolations = async (req, res) => {
-  // Mock endpoint as requested. Do not evaluate legal rules, just return data if it has violations
+  // Real aggregation over the full dataset -- no row cap, no raw list.
+  // pg-mem (the in-memory Postgres used by the test suite) can't resolve
+  // an outer-table column reference inside a LATERAL join (confirmed live:
+  // 'column "compliance_result" does not exist' even with explicit
+  // CROSS JOIN LATERAL), so the failures[] array is unnested and grouped
+  // here in JS instead of via jsonb_array_elements in SQL -- same result,
+  // works identically against real Postgres, and is actually verifiable
+  // by the test suite rather than trusted on faith.
   const result = await pool.query(`
-    SELECT id, compliance_result, updated_at
+    SELECT compliance_result
     FROM inspections
-    WHERE rule_engine_status = 'EVALUATED'
-    ORDER BY updated_at DESC
-    LIMIT 20
+    WHERE rule_engine_status = 'EVALUATED' AND compliance_result IS NOT NULL
   `);
-  
-  res.json(success(result.rows));
+
+  const byRuleMap = new Map();
+  for (const row of result.rows) {
+    const failures = row.compliance_result?.failures || [];
+    for (const f of failures) {
+      if (!byRuleMap.has(f.rule_id)) {
+        byRuleMap.set(f.rule_id, {
+          ruleId: f.rule_id,
+          severity: f.severity,
+          clauseCitation: f.clause_citation,
+          reason: f.reason,
+          count: 0,
+        });
+      }
+      byRuleMap.get(f.rule_id).count += 1;
+    }
+  }
+
+  const byRule = [...byRuleMap.values()].sort((a, b) => b.count - a.count);
+
+  const byTier = ['substantive', 'cosmetic'].map((tier) => ({
+    tier,
+    count: byRule.filter((r) => r.severity === tier).reduce((sum, r) => sum + r.count, 0),
+  }));
+
+  res.json(success({
+    totalViolations: byRule.reduce((sum, r) => sum + r.count, 0),
+    byTier,
+    byRule,
+  }));
 };
 
 exports.getInspectors = async (req, res) => {
