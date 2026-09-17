@@ -104,7 +104,7 @@ exports.updateInspection = async (req, res) => {
     }
 
     // Perform partial update
-    const allowedFields = ['product_name', 'brand_name', 'manufacturer_name', 'manufacturer_address', 'packer_name', 'packer_address', 'importer_name', 'importer_address', 'declared_quantity', 'mrp', 'mrp_raw_text', 'packed_date', 'expiry_date', 'customer_care_details', 'barcode_value', 'image_references', 'ocr_payload', 'extracted_fields', 'status'];
+    const allowedFields = ['product_name', 'brand_name', 'manufacturer_name', 'manufacturer_address', 'packer_name', 'packer_address', 'importer_name', 'importer_address', 'marketed_by_name', 'marketed_by_address', 'declared_quantity', 'mrp', 'mrp_raw_text', 'packed_date', 'expiry_date', 'customer_care_details', 'barcode_value', 'image_references', 'ocr_payload', 'extracted_fields', 'status'];
     
     let updateQuery = 'UPDATE inspections SET ';
     const queryValues = [];
@@ -301,6 +301,8 @@ exports.getReportData = async (req, res) => {
       packerAddress: data.packer_address,
       importerName: data.importer_name,
       importerAddress: data.importer_address,
+      marketedByName: data.marketed_by_name,
+      marketedByAddress: data.marketed_by_address,
       declaredQuantity: data.declared_quantity,
       mrp: data.mrp !== null ? String(data.mrp) : null,
       packedDate: data.packed_date,

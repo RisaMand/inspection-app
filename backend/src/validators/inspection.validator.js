@@ -22,6 +22,8 @@ exports.updateInspectionSchema = z.object({
     packer_address: z.string().optional().nullable(),
     importer_name: z.string().optional().nullable(),
     importer_address: z.string().optional().nullable(),
+    marketed_by_name: z.string().optional().nullable(),
+    marketed_by_address: z.string().optional().nullable(),
     declared_quantity: z.string().optional().nullable(),
     mrp: z.number().nonnegative().optional().nullable(),
     packed_date: z.string().optional().nullable(),

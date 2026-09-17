@@ -71,12 +71,13 @@ exports.syncInspections = async (req, res) => {
             INSERT INTO inspections (
               client_inspection_id, inspector_id, status, product_name, brand_name,
               manufacturer_name, manufacturer_address, packer_name, packer_address,
-              importer_name, importer_address, declared_quantity, mrp, mrp_raw_text, packed_date, expiry_date,
+              importer_name, importer_address, marketed_by_name, marketed_by_address,
+              declared_quantity, mrp, mrp_raw_text, packed_date, expiry_date,
               customer_care_details, barcode_value, image_references, ocr_payload, extracted_fields,
               rule_config_version, client_created_at, client_updated_at, product_id,
               compliance_result, rule_engine_status, session_id
             ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30
             )
             ON CONFLICT (client_inspection_id) DO NOTHING
             RETURNING id, server_version, updated_at
@@ -84,7 +85,9 @@ exports.syncInspections = async (req, res) => {
             item.clientInspectionId, inspectorId, item.payload.status || 'DRAFT',
             item.payload.productName, item.payload.brandName, item.payload.manufacturerName,
             item.payload.manufacturerAddress, item.payload.packerName, item.payload.packerAddress,
-            item.payload.importerName, item.payload.importerAddress, item.payload.declaredQuantity,
+            item.payload.importerName, item.payload.importerAddress,
+            item.payload.marketedByName, item.payload.marketedByAddress,
+            item.payload.declaredQuantity,
             item.payload.mrp, item.payload.mrpRawText, item.payload.packedDate, item.payload.expiryDate,
             item.payload.customerCareDetails, item.payload.barcodeValue,
             JSON.stringify(item.payload.imageReferences), JSON.stringify(item.payload.ocrPayload),
@@ -207,13 +210,14 @@ exports.syncInspections = async (req, res) => {
               UPDATE inspections SET
                 status = $1, product_name = $2, brand_name = $3, manufacturer_name = $4,
                 manufacturer_address = $5, packer_name = $6, packer_address = $7,
-                importer_name = $8, importer_address = $9, declared_quantity = $10,
-                mrp = $11, mrp_raw_text = $12, packed_date = $13, expiry_date = $14, customer_care_details = $15,
-                barcode_value = $16, image_references = $17, ocr_payload = $18,
-                extracted_fields = $19, product_id = $20, client_updated_at = $21,
-                compliance_result = $22, rule_engine_status = $23, server_version = server_version + 1,
+                importer_name = $8, importer_address = $9, marketed_by_name = $10, marketed_by_address = $11,
+                declared_quantity = $12,
+                mrp = $13, mrp_raw_text = $14, packed_date = $15, expiry_date = $16, customer_care_details = $17,
+                barcode_value = $18, image_references = $19, ocr_payload = $20,
+                extracted_fields = $21, product_id = $22, client_updated_at = $23,
+                compliance_result = $24, rule_engine_status = $25, server_version = server_version + 1,
                 synced_at = NOW(), updated_at = NOW()
-              WHERE id = $24 AND server_version = $25
+              WHERE id = $26 AND server_version = $27
               RETURNING server_version, updated_at
             `, [
               newStatus,
@@ -225,6 +229,8 @@ exports.syncInspections = async (req, res) => {
               item.payload.packerAddress !== undefined ? item.payload.packerAddress : serverRecord.packer_address,
               item.payload.importerName !== undefined ? item.payload.importerName : serverRecord.importer_name,
               item.payload.importerAddress !== undefined ? item.payload.importerAddress : serverRecord.importer_address,
+              item.payload.marketedByName !== undefined ? item.payload.marketedByName : serverRecord.marketed_by_name,
+              item.payload.marketedByAddress !== undefined ? item.payload.marketedByAddress : serverRecord.marketed_by_address,
               item.payload.declaredQuantity !== undefined ? item.payload.declaredQuantity : serverRecord.declared_quantity,
               item.payload.mrp !== undefined ? item.payload.mrp : serverRecord.mrp,
               item.payload.mrpRawText !== undefined ? item.payload.mrpRawText : serverRecord.mrp_raw_text,

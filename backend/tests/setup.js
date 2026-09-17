@@ -52,6 +52,7 @@ runMigration('004_inspections_updates.sql');
 runMigration('005_session_visit_data.sql');
 runMigration('006_products_barcode_nullable.sql');
 runMigration('007_products_name_nullable.sql');
+runMigration('008_marketed_by.sql');
 
 // Use synchronous bcrypt hash so seeds complete before tests
 const hash = bcrypt.hashSync('password123', 1);
