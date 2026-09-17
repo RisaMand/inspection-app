@@ -255,9 +255,12 @@ exports.attachComplianceResult = async (req, res) => {
 exports.getReportData = async (req, res) => {
   const { id } = req.params;
   const result = await pool.query(`
-    SELECT i.*, u.full_name as inspector_name, u.email as inspector_email
+    SELECT i.*, u.full_name as inspector_name, u.email as inspector_email,
+           s.visit_number as session_visit_number, s.shop_number as session_shop_number,
+           s.gps_lat as session_gps_lat, s.gps_lng as session_gps_lng
     FROM inspections i
     JOIN users u ON i.inspector_id = u.id
+    LEFT JOIN sessions s ON i.session_id = s.id
     WHERE i.id = $1
   `, [id]);
   
@@ -282,6 +285,12 @@ exports.getReportData = async (req, res) => {
       id: data.inspector_id,
       name: data.inspector_name,
       email: data.inspector_email
+    },
+    visit: {
+      visitNumber: data.session_visit_number,
+      shopNumber: data.session_shop_number,
+      gpsLat: data.session_gps_lat,
+      gpsLng: data.session_gps_lng
     },
     capturedData: {
       productName: data.product_name,
