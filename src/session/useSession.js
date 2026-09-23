@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { dbPromise } from '../db/db';
 import { api } from '../lib/api/client';
+import { uploadPhotos } from '../lib/api/photoUpload.js';
+import { translateItemPayload } from '../lib/api/translateItemForSync.js';
 import { mapFieldsToRules } from '../lib/mapFieldsToRules.js';
 import { checkCompliance } from '../lib/rules/ruleInterpreter.js';
 import evaluateVerdict from '../lib/rules/verdictEvaluator.js';
@@ -122,6 +124,20 @@ export function useSession(userId, token) {
     }
 
     const itemId = crypto.randomUUID();
+
+    // Section 2.5: upload this item's photos now, at sync time -- not from
+    // Capture.jsx, per photoUpload.js's own documented intent. Best-effort:
+    // an offline/failed upload doesn't block the item from being saved
+    // locally (pipeline step 9, local-first); it just means imageReferences
+    // stays empty and this item stays PENDING for background sync (9.5)
+    // to pick up later, same offline-fallback shape as startSession below.
+    let imageReferences = [];
+    try {
+      imageReferences = await uploadPhotos(token, photos);
+    } catch (err) {
+      console.warn('Photo upload did not complete, item will sync without images for now:', err.message);
+    }
+
     const newItem = {
       id: itemId,
       photos,
@@ -130,7 +146,40 @@ export function useSession(userId, token) {
       confidence,
       checkResult,
       createdAt: new Date().toISOString(),
+      imageReferences,
+      serverId: null,
+      syncStatus: 'PENDING',
     };
+
+    // Section 2.4 + 2.5: thread session.serverId onto the item and push it
+    // to the server. Every field the backend contract expects is present
+    // on the payload, even where this FE can only supply null right now
+    // (productName, barcodeValue, tamper signal, etc.) -- translateItemForSync.js
+    // is the single place that contract is built, so it can't drift per call site.
+    try {
+      const syncItem = translateItemPayload(newItem, {
+        imageReferences,
+        sessionServerId: session.serverId,
+        ruleConfigVersion: ruleConfig.version,
+      });
+      const { results } = await api.syncInspections(token, {
+        idempotencyKey: crypto.randomUUID(),
+        items: [syncItem],
+      });
+      const result = results?.[0];
+      if (result?.status === 'SYNCED') {
+        newItem.serverId = result.serverId;
+        newItem.syncStatus = 'SYNCED';
+      } else if (result) {
+        // CONFLICT or ERROR from the server -- stays PENDING locally rather
+        // than SYNCED; not treated as a thrown/offline case since the
+        // server was reachable and gave a real, informative answer.
+        newItem.syncStatus = result.status;
+      }
+    } catch (err) {
+      console.warn('Item did not sync to server, continuing offline:', err.message);
+    }
+
     const updatedSession = { ...session, items: [...session.items, newItem] };
 
     const db = await dbPromise;

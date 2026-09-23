@@ -39,4 +39,10 @@ export const api = {
   // client function. See src/lib/api/photoUpload.js for the real upload.
   createUploadUrl: (token) =>
     request('/photos/upload-url', { method: 'POST', token }),
+  // Section 2.5: the core of the FE<->BE sync arc -- items[] entries are
+  // built by translateItemForSync.js, one idempotencyKey per batch so a
+  // retried sync (e.g. after a dropped connection) never double-creates
+  // server rows for the same items.
+  syncInspections: (token, { deviceId, idempotencyKey, items }) =>
+    request('/sync/inspections', { method: 'POST', body: { deviceId, idempotencyKey, items }, token }),
 };
