@@ -311,3 +311,71 @@ describe('fieldExtractor integration & regression cases', () => {
   });
 });
 
+// Section 2.3: manufacturer/packer/importer/marketed-by role split.
+// MANUFACTURER_ADDRESS's single alias list detects all 4 roles (LMR
+// Rule 6(1)(a) treats them as alternative declarations), but before this
+// fix every match got WRITTEN into the same MANUFACTURER_ADDRESS/
+// MANUFACTURER fields regardless of which alias actually matched. These
+// cases lock in that matched_label now routes to the correct role field.
+describe('fieldExtractor: manufacturer/packer/importer/marketed-by role split (2.3)', () => {
+  it('routes a "packed by" declaration to PACKER, not MANUFACTURER', () => {
+    const ocrText = ['Packed By: Sunrise Packagers Pvt. Ltd', '45, MIDC Area, Pune, India'].join('\n');
+    const result = extractFields(ocrText, { wholeImageConfidence: 90 });
+
+    assert.equal(result.PACKER.value, 'Sunrise Packagers Pvt. Ltd');
+    assert.equal(result.PACKER_ADDRESS.value, '45, MIDC Area, Pune, India');
+    assert.equal(result.PACKER_ADDRESS.matched_label, 'packed by');
+    assert.equal(result.MANUFACTURER, undefined);
+    assert.equal(result.MANUFACTURER_ADDRESS, undefined);
+  });
+
+  it('routes an "imported by" declaration to IMPORTER', () => {
+    const ocrText = ['Imported By: Global Foods Trading Co', 'Plot 7, Sector 18, Gurugram, India'].join('\n');
+    const result = extractFields(ocrText, { wholeImageConfidence: 90 });
+
+    assert.equal(result.IMPORTER.value, 'Global Foods Trading Co');
+    assert.equal(result.IMPORTER_ADDRESS.value, 'Plot 7, Sector 18, Gurugram, India');
+    assert.equal(result.IMPORTER_ADDRESS.matched_label, 'imported by');
+    assert.equal(result.MANUFACTURER, undefined);
+  });
+
+  it('routes a "marketed by" declaration to MARKETED_BY', () => {
+    const ocrText = ['Marketed By: Retail Distributors India Ltd', 'Tower B, BKC, Mumbai, India'].join('\n');
+    const result = extractFields(ocrText, { wholeImageConfidence: 90 });
+
+    assert.equal(result.MARKETED_BY.value, 'Retail Distributors India Ltd');
+    assert.equal(result.MARKETED_BY_ADDRESS.value, 'Tower B, BKC, Mumbai, India');
+    assert.equal(result.MARKETED_BY_ADDRESS.matched_label, 'marketed by');
+    assert.equal(result.MANUFACTURER, undefined);
+  });
+
+  it('routes a combo "manufactured & marketed by" declaration to MANUFACTURER (one entity, two roles)', () => {
+    const ocrText = ['Manufactured & Marketed By: ABC Foods Pvt Ltd', '123 Industrial Area, Mumbai, India'].join('\n');
+    const result = extractFields(ocrText, { wholeImageConfidence: 90 });
+
+    assert.equal(result.MANUFACTURER.value, 'ABC Foods Pvt Ltd');
+    assert.equal(result.MANUFACTURER_ADDRESS.value, '123 Industrial Area, Mumbai, India');
+    assert.equal(result.MARKETED_BY, undefined);
+  });
+
+  it('extracts all 3 roles independently when a label declares more than one', () => {
+    const ocrText = [
+      'Manufactured By: ABC Foods Pvt Ltd',
+      '123 Industrial Area, Mumbai, India',
+      'Packed By: Sunrise Packagers Pvt. Ltd',
+      '45, MIDC Area, Pune, India',
+      'Marketed By: Retail Distributors India Ltd',
+      'Tower B, BKC, Mumbai, India',
+    ].join('\n');
+    const result = extractFields(ocrText, { wholeImageConfidence: 90 });
+
+    assert.equal(result.MANUFACTURER.value, 'ABC Foods Pvt Ltd');
+    assert.equal(result.PACKER.value, 'Sunrise Packagers Pvt. Ltd');
+    assert.equal(result.MARKETED_BY.value, 'Retail Distributors India Ltd');
+    // None of the 3 should have bled into each other's fields
+    assert.notEqual(result.MANUFACTURER_ADDRESS.value, result.PACKER_ADDRESS.value);
+    assert.notEqual(result.PACKER_ADDRESS.value, result.MARKETED_BY_ADDRESS.value);
+  });
+});
+
+

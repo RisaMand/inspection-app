@@ -598,4 +598,63 @@ test("does not mark result for review above 80% confidence", () => {
     );
 });
 
+// Section 2.3 follow-on: since fieldExtractor.js now writes packer/
+// importer/marketed-by declarations to their own fields instead of
+// collapsing everything into MANUFACTURER_ADDRESS, MANUFACTURER_ADDRESS_
+// PRESENCE (Rule 6(1)(a), "name and address of manufacturer/packer/
+// importer") must pass when ANY of the 4 responsible-party fields is
+// populated, not just MANUFACTURER_ADDRESS specifically.
+    test("passes MANUFACTURER_ADDRESS_PRESENCE when only a packer is declared (no manufacturer line at all)", () => {
+    const result = runCompliance({
+        ...baseData,
+
+        MANUFACTURER_ADDRESS: {
+            text: "",
+            confidence: 0.90
+        },
+
+        PACKER_ADDRESS: {
+            text: "45, MIDC Area, Pune, India",
+            confidence: 0.92
+        }
+    });
+
+    expect(
+        result.failures.some(f => f.rule_id === "MANUFACTURER_ADDRESS_PRESENCE")
+    ).toBe(false);
+});
+
+    test("passes MANUFACTURER_ADDRESS_PRESENCE when only an importer or marketed-by party is declared", () => {
+    const importerOnly = runCompliance({
+        ...baseData,
+        MANUFACTURER_ADDRESS: { text: "", confidence: 0.90 },
+        IMPORTER_ADDRESS: { text: "Plot 7, Sector 18, Gurugram, India", confidence: 0.9 }
+    });
+    expect(
+        importerOnly.failures.some(f => f.rule_id === "MANUFACTURER_ADDRESS_PRESENCE")
+    ).toBe(false);
+
+    const marketedByOnly = runCompliance({
+        ...baseData,
+        MANUFACTURER_ADDRESS: { text: "", confidence: 0.90 },
+        MARKETED_BY_ADDRESS: { text: "Tower B, BKC, Mumbai, India", confidence: 0.9 }
+    });
+    expect(
+        marketedByOnly.failures.some(f => f.rule_id === "MANUFACTURER_ADDRESS_PRESENCE")
+    ).toBe(false);
+});
+
+    test("still fails MANUFACTURER_ADDRESS_PRESENCE when none of the 4 responsible-party fields are populated", () => {
+    const result = runCompliance({
+        ...baseData,
+        MANUFACTURER_ADDRESS: { text: "", confidence: 0.90 }
+        // no PACKER_ADDRESS/IMPORTER_ADDRESS/MARKETED_BY_ADDRESS at all
+    });
+
+    expect(result.verdict).toBe("NON_COMPLIANT");
+    expect(
+        result.failures.some(f => f.rule_id === "MANUFACTURER_ADDRESS_PRESENCE")
+    ).toBe(true);
+});
+
 });

@@ -661,6 +661,35 @@ const COMMON_NOISE_WORDS = new Set([
   'निर्माता', 'पैककर्ता', 'विपणनकर्ता', 'तिथि', 'दिनांक', 'संख्या'
 ]);
 
+// Section 2.3: MANUFACTURER_ADDRESS's single alias list covers manufacturer,
+// packer, importer, and marketed-by declarations all at once (LMR Rule
+// 6(1)(a) treats them as alternative "responsible party" declarations, so
+// they were always detected together) -- but they used to all get WRITTEN
+// to the same MANUFACTURER_ADDRESS/MANUFACTURER extracted-field pair
+// regardless of which one actually matched, discarding the role the label
+// itself declared even though matchedAlias already carried it. This
+// classifies the literal alias phrase that matched into the specific role
+// field the sync contract expects (manufacturerName/Address, packerName/
+// Address, importerName/Address, marketedByName/Address).
+function classifyAddressRole(matchedAlias) {
+  const a = (matchedAlias || '').toLowerCase();
+  // Combo aliases name one entity performing multiple roles at once
+  // ("manufactured & marketed by", "manufactured and packed by",
+  // "निर्माता और विपणनकर्ता") -- the manufacturing role is treated as the
+  // base identity in Legal Metrology declarations, so these route to
+  // MANUFACTURER rather than splitting one declared party across two
+  // backend fields. Checking for it first is what makes combo aliases
+  // resolve here instead of falling into the packer/marketed branches below.
+  if (/manufactur|produced|\bmfd\b|\bmfg\b|निर्मित|निर्माता/.test(a)) return 'MANUFACTURER';
+  if (/pack|pkd|पैक/.test(a)) return 'PACKER';
+  if (/import|आयात/.test(a)) return 'IMPORTER';
+  if (/market|distribut|विपणन/.test(a)) return 'MARKETED_BY';
+  // Generic place/address/location aliases ("address:", "place", "पता")
+  // carry no role keyword at all -- default to MANUFACTURER, matching this
+  // field's behavior before 2.3 (everything used to land here regardless).
+  return 'MANUFACTURER';
+}
+
 /**
  * Validates whether an extracted string is a substantive value and not
  * an accidental label synonym, noise, or empty speck.
@@ -925,6 +954,15 @@ export function extractFields(ocrText, options = {}) {
   }));
 
   let i = 0;
+  // Section 2.3 fix: tracks every line index the main label loop already
+  // attributed to some role (manufacturer/packer/importer/marketed-by/
+  // etc), so Stage 10's unlabeled address fallback below (which used to
+  // blind-scan the whole document) can't re-discover a line already
+  // consumed under a DIFFERENT role and misattribute it to
+  // MANUFACTURER_ADDRESS. Before the role split this couldn't happen
+  // visibly -- every role's text landed in MANUFACTURER_ADDRESS anyway,
+  // so Stage 10 finding it "already set" was accidental, not by design.
+  const consumedLineIndices = new Set();
   while (i < normalizedLines.length) {
     const current = normalizedLines[i];
     if (current.isBlank) {
@@ -1024,14 +1062,23 @@ export function extractFields(ocrText, options = {}) {
           }
         }
 
-        // Preserve previously extracted entity name if this line only has the place/address
-        const existingEntity = extracted.MANUFACTURER?.value || extracted.MANUFACTURER_ADDRESS?.manufacturer;
+        // Section 2.3: which of the 4 role fields this declaration
+        // actually belongs to, per the literal alias phrase that matched.
+        const role = classifyAddressRole(matchedAlias);
+        const roleAddressField = `${role}_ADDRESS`;
+
+        // Preserve previously extracted entity name if this line only has
+        // the place/address -- looked up under the SAME role, not
+        // hardcoded to MANUFACTURER, so a multi-line packer declaration
+        // (name on one line, address alias on the next) still merges
+        // correctly instead of bleeding into the manufacturer's fields.
+        const existingEntity = extracted[role]?.value || extracted[roleAddressField]?.manufacturer;
         if (existingEntity && (!entityName || entityName === addressText || isExplicitPlaceAlias)) {
           entityName = existingEntity;
         }
 
         // Preserve previously extracted address if this line only has the entity name
-        const existingAddress = extracted.MANUFACTURER_ADDRESS?.address;
+        const existingAddress = extracted[roleAddressField]?.address;
         if (existingAddress && (!addressText || entityName === addressText) && !isExplicitPlaceAlias) {
           addressText = existingAddress;
         }
@@ -1040,8 +1087,8 @@ export function extractFields(ocrText, options = {}) {
           ? `${entityName}, ${addressText}`
           : (entityName || addressText);
 
-        extracted.MANUFACTURER_ADDRESS = {
-          field: 'MANUFACTURER_ADDRESS',
+        extracted[roleAddressField] = {
+          field: roleAddressField,
           value: addressText,
           text: addressText,
           raw_label: rawLabel,
@@ -1055,8 +1102,8 @@ export function extractFields(ocrText, options = {}) {
         };
 
         if (entityName) {
-          extracted.MANUFACTURER = {
-            field: 'MANUFACTURER',
+          extracted[role] = {
+            field: role,
             value: entityName,
             text: entityName,
             raw_label: rawLabel,
@@ -1070,6 +1117,10 @@ export function extractFields(ocrText, options = {}) {
           };
         }
 
+        // PLACE_OF_MANUFACTURE stays generic across roles (not part of the
+        // sync contract, and "place of X" aliases already exist for
+        // manufacturer/packing/import interchangeably) -- left as-is,
+        // out of scope for this fix.
         if (isExplicitPlaceAlias || (addressText && addressText !== entityName)) {
           extracted.PLACE_OF_MANUFACTURE = {
             field: 'PLACE_OF_MANUFACTURE',
@@ -1107,6 +1158,9 @@ export function extractFields(ocrText, options = {}) {
     }
 
     // Advance index past any consumed subsequent lines
+    for (let k = i; k < Math.max(i + 1, nextIdx); k++) {
+      consumedLineIndices.add(k);
+    }
     i = Math.max(i + 1, nextIdx);
   }
 
@@ -1281,6 +1335,7 @@ export function extractFields(ocrText, options = {}) {
     const ADDRESS_LINE_RE = /(?:industrial area|industrial estate|plot no|survey no|p\.?o\.?|road|rd\.?|street|st\.?|sector|phase|nagar|colony|mumbai|delhi|bengaluru|bangalore|hyderabad|chennai|kolkata|pune|ahmedabad|india|pin\s*[-:]?\s*\d{6}|\b\d{6}\b)/i;
     for (const item of normalizedLines) {
       if (item.isBlank) continue;
+      if (consumedLineIndices.has(item.idx)) continue;
       // Skip lines belonging to ingredients, nutrition, dates, contact, MRP
       if (/(?:ingredients|nutrition|facts|serving|calories|fat|sugar|protein|date|exp|mfg|batch|mrp|customer|care|email)/i.test(item.text)) continue;
       if (ADDRESS_LINE_RE.test(item.text)) {
