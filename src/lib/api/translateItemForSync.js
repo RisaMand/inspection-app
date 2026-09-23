@@ -6,22 +6,18 @@
 // backend/src/validators/sync.validator.js's createItemSchema/updateItemSchema
 // `payload` shape, verbatim field-for-field.
 //
-// 2.3 (manufacturer/packer/importer/marketed-by role split) is a separate,
-// real fix inside fieldExtractor.js and is NOT done yet as of this file --
-// fieldExtractor.js currently collapses every role into MANUFACTURER_ADDRESS/
-// MANUFACTURER regardless of which alias (marketed by/packed by/imported by)
-// actually matched. So packerName/Address, importerName/Address, and
-// marketedByName/Address are wired here (reading PACKER_ADDRESS/PACKER,
-// IMPORTER_ADDRESS/IMPORTER, MARKETED_BY_ADDRESS/MARKETED_BY) but will only
-// ever be null until 2.3 ships -- that's the correct behavior per the
-// standing instruction ("null is a legitimate value to send; skipping the
-// wire is not"), not a bug in this file.
+// 2.3 (manufacturer/packer/importer/marketed-by role split) has since
+// landed in fieldExtractor.js -- packerName/Address, importerName/Address,
+// and marketedByName/Address below now resolve to real values whenever the
+// label declares that role, reading PACKER_ADDRESS/PACKER,
+// IMPORTER_ADDRESS/IMPORTER, MARKETED_BY_ADDRESS/MARKETED_BY exactly as
+// fieldExtractor.js now writes them.
 
 /**
  * Parses a raw MRP string (e.g. "Rs. 45.00", "₹45/-", "MRP: 45.50 (incl. of
  * all taxes)") into a plain number for the backend's `mrp: number` field.
- * Backend wants a float; fieldExtractor's MRP.source_text keeps the
- * untouched raw text (currency symbol, tax phrasing) separately for
+ * Backend wants a float; the cleaned field value (currency symbol, tax
+ * phrasing intact, label already stripped) is kept separately for
  * mrpRawText, so nothing is lost -- this only strips symbols to get a
  * parseable numeric substring.
  * @param {string | null | undefined} raw
@@ -65,16 +61,15 @@ export function translateItemPayload(item, { imageReferences = [], sessionServer
   const mrpText = fieldValue(extracted, 'MRP');
 
   const payload = {
-    // 1.3 / Section 0: product/brand name extraction doesn't exist on the
-    // FE yet (COMMODITY_NAME's synonym list is still empty) -- null is
-    // correct here until that CV/RE work lands, not a gap in this file.
-    productName: null,
+    // COMMODITY_NAME has a real extraction path (label aliases, plus a
+    // prominent-product-title fallback for unlabeled packaging) -- it's
+    // the closest thing the CV/RE pipeline currently produces to a product
+    // name. brandName has no source at all yet (no brand-vs-commodity-name
+    // distinction exists): explicit null, not a duplicate of productName.
+    productName: fieldValue(extracted, 'COMMODITY_NAME'),
     brandName: null,
 
-    // Role-split fields (2.3 dependency) -- MANUFACTURER_ADDRESS/MANUFACTURER
-    // are the only ones fieldExtractor.js can actually populate today;
-    // PACKER_/IMPORTER_/MARKETED_BY_ read from field names that don't exist
-    // in extracted{} yet, so they resolve to null until 2.3 splits them out.
+    // Section 2.3's four LMR-2011 responsible-party roles.
     manufacturerName: fieldValue(extracted, 'MANUFACTURER'),
     manufacturerAddress: fieldValue(extracted, 'MANUFACTURER_ADDRESS'),
     packerName: fieldValue(extracted, 'PACKER'),
@@ -86,7 +81,12 @@ export function translateItemPayload(item, { imageReferences = [], sessionServer
 
     declaredQuantity: fieldValue(extracted, 'NET_QUANTITY'),
     mrp: parseMrpValue(mrpText),
-    mrpRawText: extracted?.MRP?.source_text ?? mrpText ?? null,
+    // fieldValue() already returns the label-stripped value (currency
+    // symbol and tax phrasing intact, e.g. "Rs. 50.00 (Incl. of all
+    // taxes)") -- NOT extracted.MRP.source_text, which still carries the
+    // raw "MRP:" label prefix and would leak the label itself into the
+    // stored raw text.
+    mrpRawText: mrpText,
     packedDate: fieldValue(extracted, 'MANUFACTURE_DATE'),
     expiryDate: fieldValue(extracted, 'EXPIRY_DATE'),
     customerCareDetails: fieldValue(extracted, 'CONSUMER_CARE'),

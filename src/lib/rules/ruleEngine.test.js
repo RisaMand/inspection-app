@@ -624,7 +624,7 @@ test("does not mark result for review above 80% confidence", () => {
     ).toBe(false);
 });
 
-    test("passes MANUFACTURER_ADDRESS_PRESENCE when only an importer or marketed-by party is declared", () => {
+    test("passes MANUFACTURER_ADDRESS_PRESENCE when only an importer is declared", () => {
     const importerOnly = runCompliance({
         ...baseData,
         MANUFACTURER_ADDRESS: { text: "", confidence: 0.90 },
@@ -633,22 +633,31 @@ test("does not mark result for review above 80% confidence", () => {
     expect(
         importerOnly.failures.some(f => f.rule_id === "MANUFACTURER_ADDRESS_PRESENCE")
     ).toBe(false);
+});
 
+    // Rule 6(1)(a)'s actual text names only manufacturer/packer/importer as
+    // substitutable roles. "Marketed by" is a separate declaration (see the
+    // comment on RESPONSIBLE_PARTY_FIELDS in ruleInterpreter.js) and must
+    // NOT be able to satisfy this rule on its own -- a label declaring only
+    // a marketer, with no manufacturer/packer/importer at all, is a real
+    // violation and has to still fail here.
+    test("still fails MANUFACTURER_ADDRESS_PRESENCE when only marketed-by is declared (not a Rule 6(1)(a) substitute)", () => {
     const marketedByOnly = runCompliance({
         ...baseData,
         MANUFACTURER_ADDRESS: { text: "", confidence: 0.90 },
         MARKETED_BY_ADDRESS: { text: "Tower B, BKC, Mumbai, India", confidence: 0.9 }
     });
+    expect(marketedByOnly.verdict).toBe("NON_COMPLIANT");
     expect(
         marketedByOnly.failures.some(f => f.rule_id === "MANUFACTURER_ADDRESS_PRESENCE")
-    ).toBe(false);
+    ).toBe(true);
 });
 
-    test("still fails MANUFACTURER_ADDRESS_PRESENCE when none of the 4 responsible-party fields are populated", () => {
+    test("still fails MANUFACTURER_ADDRESS_PRESENCE when none of manufacturer/packer/importer are populated", () => {
     const result = runCompliance({
         ...baseData,
         MANUFACTURER_ADDRESS: { text: "", confidence: 0.90 }
-        // no PACKER_ADDRESS/IMPORTER_ADDRESS/MARKETED_BY_ADDRESS at all
+        // no PACKER_ADDRESS/IMPORTER_ADDRESS at all
     });
 
     expect(result.verdict).toBe("NON_COMPLIANT");

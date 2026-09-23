@@ -21,6 +21,9 @@ export default function ComplianceReportBody({ item, session }) {
     if (key === 'UNIT_SALE_PRICE') return 'Unit Sale Price';
     if (key === 'MANUFACTURER_ADDRESS') return 'Manufacturer Address / Place of Manufacture';
     if (key === 'PLACE_OF_MANUFACTURE') return 'Place of Manufacture';
+    if (key === 'PACKER_ADDRESS') return 'Packer Address';
+    if (key === 'IMPORTER_ADDRESS') return 'Importer Address';
+    if (key === 'MARKETED_BY_ADDRESS') return 'Marketed By Address';
     if (key === 'MANUFACTURE_DATE') return 'Manufacture Date';
     if (key === 'EXPIRY_DATE') return 'Expiry Date';
     if (key === 'BATCH_NUMBER') return 'Batch Number';
