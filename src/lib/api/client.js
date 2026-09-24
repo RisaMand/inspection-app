@@ -45,4 +45,19 @@ export const api = {
   // server rows for the same items.
   syncInspections: (token, { deviceId, idempotencyKey, items }) =>
     request('/sync/inspections', { method: 'POST', body: { deviceId, idempotencyKey, items }, token }),
+
+  // Section 2.6: the server-authoritative currently-active rule config.
+  // See src/lib/ruleConfigCache.js for the fetch+cache+bundled-fallback
+  // wrapper that actually calls this from useSession.js.
+  getActiveRules: (token) =>
+    request('/rules/active', { token }),
+
+  // Section 2.7: barcode-keyed product lookup + prior compliance history.
+  // No caller exists yet -- barcode scanning itself (audit 1.5) isn't
+  // built on the FE -- but the client call is written and ready, so
+  // nothing here waits on 1.5 to exist before the pipe can carry it.
+  lookupProductByBarcode: (token, barcode) =>
+    request(`/products/lookup?barcode=${encodeURIComponent(barcode)}`, { token }),
+  getProductHistory: (token, productId) =>
+    request(`/products/${productId}/history`, { token }),
 };

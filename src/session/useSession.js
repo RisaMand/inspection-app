@@ -6,15 +6,20 @@ import { translateItemPayload } from '../lib/api/translateItemForSync.js';
 import { mapFieldsToRules } from '../lib/mapFieldsToRules.js';
 import { checkCompliance } from '../lib/rules/ruleInterpreter.js';
 import evaluateVerdict from '../lib/rules/verdictEvaluator.js';
-import ruleConfig from '../lib/rules/Ruleconfig.json';
+import { fetchAndCacheActiveRuleConfig, getActiveRuleConfig } from '../lib/ruleConfigCache.js';
 
 // Placement and font-size checks are out of scope for this round — final,
 // not pending (Person 4 decision, confirmed): legal panel identity cannot
 // be derived from OCR box geometry and no DPI is measured, so these rules
-// stay filtered out of live evaluation rather than faked.
-const r1ActiveRules = (ruleConfig.rules || []).filter(
-  (r) => r.check_type !== 'font_size' && r.check_type !== 'placement'
-);
+// stay filtered out of live evaluation rather than faked. Applied to
+// whichever config is actually active right now (Section 2.6 -- server's
+// published version when reachable, bundled Ruleconfig.json otherwise),
+// not just the bundled file.
+function filterActiveRules(rules) {
+  return (rules || []).filter(
+    (r) => r.check_type !== 'font_size' && r.check_type !== 'placement'
+  );
+}
 
 export function useSession(userId, token) {
   const [allSessions, setAllSessions] = useState([]);
@@ -29,6 +34,18 @@ export function useSession(userId, token) {
     }
     loadSessions();
   }, []);
+
+  // Section 2.6: refresh the cached rule config as soon as a token is
+  // available (app launch / login), so an amendment published server-side
+  // while this device was offline gets picked up without waiting for a
+  // new session to start. Fire-and-forget: fetchAndCacheActiveRuleConfig()
+  // never throws, and addItem() always re-reads whatever's cached (or
+  // falls back to the bundled file) at capture time regardless of whether
+  // this particular refresh landed in time.
+  useEffect(() => {
+    if (!token) return;
+    fetchAndCacheActiveRuleConfig(token);
+  }, [token]);
 
   const session = userId
     ? allSessions.find((s) => s.createdBy === userId && s.endedAt === null) ?? null
@@ -50,6 +67,12 @@ export function useSession(userId, token) {
         prev.map((s) => (s.id === archivedPrevious.id ? archivedPrevious : s))
       );
     }
+
+    // Session boundary is also a natural sync point (pipeline step 9.5) to
+    // refresh the cached rule config -- awaited (unlike the mount-time
+    // fetch above) so the very first item of this session already has the
+    // freshest config this device can reach, not last session's.
+    await fetchAndCacheActiveRuleConfig(token);
 
     let serverId = null;
     let syncStatus = 'PENDING';
@@ -102,13 +125,22 @@ export function useSession(userId, token) {
       isImported = Boolean(payload.isImported);
     }
 
+    // Section 2.6: read whatever's actually active right now (freshest
+    // cached server config, or the bundled file if none has ever been
+    // fetched successfully) fresh for THIS item, not a value captured once
+    // at hook-mount -- a background refresh from another tab/session
+    // boundary should be picked up by the very next item, not just the
+    // next app launch.
+    const { version: activeRuleConfigVersion, rules: activeRules } = await getActiveRuleConfig();
+    const activeRulesFiltered = filterActiveRules(activeRules);
+
     let checkResult = null;
     try {
       const textToExtract = ocrRawText && ocrRawText !== ocrText
         ? `${ocrText}\n\n${ocrRawText}`
         : (ocrText || ocrRawText);
       const extractedFields = mapFieldsToRules(textToExtract, confidence, isImported);
-      const ruleResults = checkCompliance(r1ActiveRules, extractedFields);
+      const ruleResults = checkCompliance(activeRulesFiltered, extractedFields);
       checkResult = evaluateVerdict(ruleResults);
       checkResult.extractedFields = extractedFields;
     } catch (err) {
@@ -145,6 +177,7 @@ export function useSession(userId, token) {
       ocrRawText,
       confidence,
       checkResult,
+      ruleConfigVersion: activeRuleConfigVersion,
       createdAt: new Date().toISOString(),
       imageReferences,
       serverId: null,
@@ -160,7 +193,10 @@ export function useSession(userId, token) {
       const syncItem = translateItemPayload(newItem, {
         imageReferences,
         sessionServerId: session.serverId,
-        ruleConfigVersion: ruleConfig.version,
+        // The version actually used to compute this item's checkResult
+        // above -- not just "whatever's active now", which could have
+        // changed between capture and this sync call.
+        ruleConfigVersion: activeRuleConfigVersion,
       });
       const { results } = await api.syncInspections(token, {
         idempotencyKey: crypto.randomUUID(),
