@@ -3,49 +3,96 @@ const { success, error } = require('../utils/apiResponse');
 const { createSignedDownloadUrls } = require('../config/supabaseStorage');
 
 exports.getInspections = async (req, res) => {
-  const { status, inspectorId, ruleConfigVersion, page = 1, limit = 10 } = req.query;
+  const { status, inspectorId, ruleConfigVersion, from, to, shop, severity, page = 1, limit = 10 } = req.query;
   const parsedPage = parseInt(page, 10) || 1;
   const parsedLimit = parseInt(limit, 10) || 10;
   const offset = (parsedPage - 1) * parsedLimit;
   const user = req.user;
 
-  let query = 'SELECT * FROM inspections WHERE 1=1';
-  let countQuery = 'SELECT COUNT(*) FROM inspections WHERE 1=1';
+  // 2.8: date range / shop / severity filters, and visit/shop/gps context on
+  // every row -- none of these existed before (this endpoint only supported
+  // status/inspectorId/ruleConfigVersion). shop and visit/gps context live
+  // on `sessions`, not `inspections`, and /sessions/* is INSPECTOR-only, so
+  // OFFICIAL had no way to reach that data per-row at all until this join.
+  let query = `
+    SELECT i.*, s.visit_number, s.shop_number, s.gps_lat, s.gps_lng
+    FROM inspections i
+    LEFT JOIN sessions s ON i.session_id = s.id
+    WHERE 1=1
+  `;
+  let countQuery = `
+    SELECT COUNT(*)
+    FROM inspections i
+    LEFT JOIN sessions s ON i.session_id = s.id
+    WHERE 1=1
+  `;
   const queryParams = [];
-  
+
+  const addCondition = (clause, value) => {
+    queryParams.push(value);
+    const withParam = clause.replace('?', `$${queryParams.length}`);
+    query += ` AND ${withParam}`;
+    countQuery += ` AND ${withParam}`;
+  };
+
   if (user.role === 'INSPECTOR') {
-    queryParams.push(user.sub);
-    query += ` AND inspector_id = $${queryParams.length}`;
-    countQuery += ` AND inspector_id = $${queryParams.length}`;
+    addCondition('i.inspector_id = ?', user.sub);
   } else if (inspectorId && (user.role === 'OFFICIAL' || user.role === 'ADMIN')) {
-    queryParams.push(inspectorId);
-    query += ` AND inspector_id = $${queryParams.length}`;
-    countQuery += ` AND inspector_id = $${queryParams.length}`;
+    addCondition('i.inspector_id = ?', inspectorId);
   }
 
   if (status) {
-    queryParams.push(status);
-    query += ` AND status = $${queryParams.length}`;
-    countQuery += ` AND status = $${queryParams.length}`;
-  }
-  
-  if (ruleConfigVersion) {
-    queryParams.push(ruleConfigVersion);
-    query += ` AND rule_config_version = $${queryParams.length}`;
-    countQuery += ` AND rule_config_version = $${queryParams.length}`;
+    addCondition('i.status = ?', status);
   }
 
-  query += ` ORDER BY updated_at DESC LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
-  
+  if (ruleConfigVersion) {
+    addCondition('i.rule_config_version = ?', ruleConfigVersion);
+  }
+
+  if (from !== undefined) {
+    const fromDate = new Date(from);
+    if (isNaN(fromDate.getTime())) {
+      return res.status(400).json(error('VALIDATION_ERROR', 'Invalid `from` date', [{ path: 'from', message: 'Must be a valid ISO date string' }], req.id));
+    }
+    addCondition('i.created_at >= ?', fromDate.toISOString());
+  }
+
+  if (to !== undefined) {
+    const toDate = new Date(to);
+    if (isNaN(toDate.getTime())) {
+      return res.status(400).json(error('VALIDATION_ERROR', 'Invalid `to` date', [{ path: 'to', message: 'Must be a valid ISO date string' }], req.id));
+    }
+    addCondition('i.created_at <= ?', toDate.toISOString());
+  }
+
+  if (shop) {
+    addCondition('s.shop_number ILIKE ?', `%${shop}%`);
+  }
+
+  if (severity) {
+    if (severity !== 'substantive' && severity !== 'cosmetic') {
+      return res.status(400).json(error('VALIDATION_ERROR', 'Invalid `severity`', [{ path: 'severity', message: 'Must be "substantive" or "cosmetic"' }], req.id));
+    }
+    // jsonb containment (@>), not jsonb_array_elements -- confirmed live
+    // against both pg-mem (the test suite's in-memory Postgres, which does
+    // not implement jsonb_array_elements at all) and standard Postgres
+    // semantics: matches when ANY element of the failures[] array contains
+    // the given severity, same as "this inspection has at least one
+    // failure of this tier".
+    addCondition("i.compliance_result->'failures' @> ?::jsonb", JSON.stringify([{ severity }]));
+  }
+
+  query += ` ORDER BY i.updated_at DESC LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+
   const finalParams = [...queryParams, parsedLimit, offset];
-  
+
   const [dataRes, countRes] = await Promise.all([
     pool.query(query, finalParams),
     pool.query(countQuery, queryParams)
   ]);
 
   const total = parseInt(countRes.rows[0].count, 10);
-  
+
   res.json(success(dataRes.rows, {
     total,
     page: parsedPage,

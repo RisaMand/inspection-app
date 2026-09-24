@@ -48,7 +48,7 @@ exports.getSummary = async (req, res) => {
     return all.length > 0 ? `WHERE ${all.join(' AND ')}` : '';
   };
 
-  const [totalRes, statusRes, ruleConfigRes, recentRes, complianceRes, trendingRes] = await Promise.all([
+  const [totalRes, statusRes, ruleConfigRes, recentRes, complianceRes, trendingRes, dailyRes] = await Promise.all([
     pool.query(`SELECT COUNT(*) FROM inspections ${whereWith()}`, windowParams),
     pool.query(`SELECT status, COUNT(*) FROM inspections ${whereWith()} GROUP BY status`, windowParams),
     pool.query(`SELECT rule_config_version, COUNT(*) FROM inspections ${whereWith()} GROUP BY rule_config_version`, windowParams),
@@ -66,7 +66,18 @@ exports.getSummary = async (req, res) => {
       SELECT compliance_result
       FROM inspections
       ${whereWith(`rule_engine_status = 'EVALUATED'`, `compliance_result IS NOT NULL`)}
-    `, windowParams)
+    `, windowParams),
+    // Section 2.8: DashboardHome's trend LINE chart (7/30/90-day selector)
+    // needs a real day-by-day series -- nothing above gives one (trending
+    // is one aggregate count per rule for the whole window, not per day).
+    // Bucketed in JS on created_at's UTC calendar date, same reasoning as
+    // trending's JS-side unnesting: keeps this verifiable by a real test
+    // instead of trusted on a raw SQL date_trunc that pg-mem may not support.
+    pool.query(`
+      SELECT created_at, compliance_result->>'verdict' as verdict
+      FROM inspections
+      ${whereWith()}
+    `, windowParams),
   ]);
 
   const summary = {
@@ -110,6 +121,22 @@ exports.getSummary = async (req, res) => {
   }
   summary.trending = [...trendingMap.values()].sort((a, b) => b.count - a.count);
 
+  // byDay: {date: 'YYYY-MM-DD', total, compliant, nonCompliant}, sorted
+  // ascending, only for days with at least one real row (no zero-filled
+  // padding -- the chart component decides how to render gaps).
+  const dayMap = new Map();
+  for (const row of dailyRes.rows) {
+    const day = row.created_at.toISOString().slice(0, 10);
+    if (!dayMap.has(day)) {
+      dayMap.set(day, { date: day, total: 0, compliant: 0, nonCompliant: 0 });
+    }
+    const bucket = dayMap.get(day);
+    bucket.total += 1;
+    if (row.verdict === 'NON_COMPLIANT' || row.verdict === 'ERROR') bucket.nonCompliant += 1;
+    if (row.verdict === 'COMPLIANT' || row.verdict === 'COMPLIANT_WITH_WARNINGS') bucket.compliant += 1;
+  }
+  summary.byDay = [...dayMap.values()].sort((a, b) => a.date.localeCompare(b.date));
+
   res.json(success(summary));
 };
 
@@ -124,9 +151,14 @@ exports.searchDashboard = async (req, res) => {
 
   const [inspections, products, users] = await Promise.all([
     pool.query(`
-      SELECT id, client_inspection_id, product_name, brand_name, status, updated_at 
-      FROM inspections 
-      WHERE product_name ILIKE $1 OR brand_name ILIKE $1 OR barcode_value ILIKE $1
+      SELECT
+        i.id, i.client_inspection_id, i.product_name, i.brand_name, i.status, i.updated_at,
+        u.full_name AS inspector_name,
+        s.visit_number, s.shop_number
+      FROM inspections i
+      LEFT JOIN users u ON i.inspector_id = u.id
+      LEFT JOIN sessions s ON i.session_id = s.id
+      WHERE i.product_name ILIKE $1 OR i.brand_name ILIKE $1 OR i.barcode_value ILIKE $1
       LIMIT 20
     `, [queryParam]),
     pool.query(`
@@ -205,4 +237,83 @@ exports.getInspectors = async (req, res) => {
   `);
   
   res.json(success(result.rows));
+};
+
+// Section 2.8: getInspectors above is just a user directory -- no session
+// counts, items inspected, or violation counts at all. This is the real
+// per-officer activity report (visits conducted / violations found / tier
+// breakdown per officer, per the original PS's own enforcement-monitoring
+// requirement), built from 3 real sources instead of invented:
+//   - users: the inspector roster itself (so an inspector with zero
+//     activity still appears, with real zeros, not silently omitted)
+//   - sessions: session count per inspector
+//   - inspections: item count + severity-tier breakdown per inspector,
+//     unnested in JS (same pattern as getViolations above -- pg-mem, the
+//     test suite's in-memory Postgres, has no jsonb_array_elements)
+exports.getOfficerActivity = async (req, res) => {
+  const [inspectorsRes, sessionCountsRes, inspectionsRes] = await Promise.all([
+    pool.query(`
+      SELECT id, full_name, email
+      FROM users
+      WHERE role = 'INSPECTOR'
+      ORDER BY full_name ASC
+    `),
+    pool.query(`
+      SELECT inspector_id, COUNT(*) as sessions_count
+      FROM sessions
+      GROUP BY inspector_id
+    `),
+    pool.query(`
+      SELECT inspector_id, status, compliance_result
+      FROM inspections
+    `),
+  ]);
+
+  const sessionCountByInspector = new Map(
+    sessionCountsRes.rows.map((r) => [r.inspector_id, parseInt(r.sessions_count, 10)])
+  );
+
+  const activityByInspector = new Map();
+  for (const row of inspectionsRes.rows) {
+    if (!activityByInspector.has(row.inspector_id)) {
+      activityByInspector.set(row.inspector_id, {
+        itemsInspected: 0,
+        substantiveCount: 0,
+        cosmeticCount: 0,
+        erroredCount: 0,
+      });
+    }
+    const bucket = activityByInspector.get(row.inspector_id);
+    bucket.itemsInspected += 1;
+
+    const verdict = row.compliance_result?.verdict;
+    if (verdict === 'ERROR') bucket.erroredCount += 1;
+
+    const failures = row.compliance_result?.failures || [];
+    for (const f of failures) {
+      if (f.severity === 'substantive') bucket.substantiveCount += 1;
+      else if (f.severity === 'cosmetic') bucket.cosmeticCount += 1;
+    }
+  }
+
+  const officerActivity = inspectorsRes.rows.map((insp) => {
+    const activity = activityByInspector.get(insp.id) || {
+      itemsInspected: 0,
+      substantiveCount: 0,
+      cosmeticCount: 0,
+      erroredCount: 0,
+    };
+    return {
+      inspectorId: insp.id,
+      inspectorName: insp.full_name,
+      sessionsCount: sessionCountByInspector.get(insp.id) || 0,
+      itemsInspected: activity.itemsInspected,
+      violationsFound: activity.substantiveCount + activity.cosmeticCount,
+      substantiveCount: activity.substantiveCount,
+      cosmeticCount: activity.cosmeticCount,
+      erroredCount: activity.erroredCount,
+    };
+  });
+
+  res.json(success(officerActivity));
 };

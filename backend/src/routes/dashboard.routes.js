@@ -10,6 +10,7 @@ router.use(authenticate, authorize('OFFICIAL', 'ADMIN'));
 router.get('/summary', asyncHandler(dashboardController.getSummary));
 router.get('/violations', asyncHandler(dashboardController.getViolations));
 router.get('/inspectors', asyncHandler(dashboardController.getInspectors));
+router.get('/officer-activity', asyncHandler(dashboardController.getOfficerActivity));
 router.get('/search', asyncHandler(dashboardController.searchDashboard));
 
 // Explicit re-exports or forwarding for dashboard/inspections can just use the regular inspections route
