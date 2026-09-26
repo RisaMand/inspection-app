@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { dbPromise } from '../db/db';
 import { api } from '../lib/api/client';
+import { classifyLoginError } from '../lib/auth/classifyLoginError.js';
 
 const AUTH_KEY = 'authState'; // { isLoggedIn, role, username, userId, token }
 
@@ -44,9 +45,16 @@ export function useAuth() {
         { isLoggedIn: true, role: resolvedRole, username: user.email, userId: user.id, token },
         AUTH_KEY
       );
-      return resolvedRole;
-    } catch {
-      return null;
+      return { role: resolvedRole };
+    } catch (err) {
+      // Section 2.9: distinguish a genuine network failure from a real
+      // server response (wrong password, a 500, etc) -- see
+      // classifyLoginError.js for why and how. Resuming an ALREADY logged
+      // in session works fully offline already (loadAuth() above only
+      // ever reads IndexedDB, never the network, and nothing anywhere
+      // force-logs-out on token expiry) -- this only affects a fresh
+      // login attempt.
+      return { error: classifyLoginError(err) };
     }
   }
 

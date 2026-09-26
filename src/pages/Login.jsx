@@ -13,9 +13,11 @@ export default function Login({ login, isLoggedIn, authLoaded, currentRole }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    const resolvedRole = await login(username, password);
-    if (resolvedRole) {
-      navigate(resolvedRole === 'inspector' ? '/session' : '/dashboard');
+    const result = await login(username, password);
+    if (result.role) {
+      navigate(result.role === 'inspector' ? '/session' : '/dashboard');
+    } else if (result.error === 'network') {
+      setError("Can't reach the server. Check your connection and try again.");
     } else {
       setError('Login failed. Please check your credentials.');
     }

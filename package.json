@@ -7,7 +7,7 @@
   "dev": "vite",
   "build": "vite build",
   "lint": "oxlint",
-  "test": "node --test src/lib/cv/*.test.js src/lib/*.test.js src/lib/api/*.test.js",
+  "test": "node --test src/lib/cv/*.test.js src/lib/*.test.js src/lib/api/*.test.js src/lib/auth/*.test.js",
   "test:rules": "vitest run src/lib/rules",
   "preview": "vite preview"
   },
