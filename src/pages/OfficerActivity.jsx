@@ -1,7 +1,8 @@
+import { useEffect, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { getOfficerActivity } from '../dashboard/mockDashboardData';
+import { api } from '../lib/api/client';
 
 const panelStyle = {
   background: '#181818',
@@ -27,8 +28,25 @@ const rowStyle = {
   alignItems: 'center',
 };
 
-export default function OfficerActivity() {
-  const officers = getOfficerActivity();
+export default function OfficerActivity({ token }) {
+  const [officers, setOfficers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getOfficerActivity(token)
+      .then((data) => {
+        if (!cancelled) { setOfficers(data); setLoading(false); }
+      })
+      .catch((err) => {
+        if (!cancelled) { setError(err.message || 'Failed to load officer activity'); setLoading(false); }
+      });
+    return () => { cancelled = true; };
+  }, [token]);
+
+  if (loading) return <div style={{ padding: '2rem' }}>Loading officer activity…</div>;
+  if (error) return <div style={{ padding: '2rem' }}>Failed to load: {error}</div>;
 
   return (
     <div style={{ padding: '2rem', maxWidth: 900, margin: '0 auto' }}>
@@ -58,16 +76,20 @@ export default function OfficerActivity() {
           <span>Cosmetic</span>
           <span>Errored</span>
         </div>
-        {officers.map((o) => (
-          <div key={o.inspectorId} style={{ ...rowStyle, color: '#e5e5e5' }}>
-            <span>{o.inspectorName}</span>
-            <span>{o.sessionsCount}</span>
-            <span>{o.itemsInspected}</span>
-            <span style={{ color: '#ff6666' }}>{o.substantiveCount}</span>
-            <span style={{ color: '#ffd13b' }}>{o.cosmeticCount}</span>
-            <span style={{ color: o.erroredCount > 0 ? '#ff6666' : '#666' }}>{o.erroredCount}</span>
-          </div>
-        ))}
+        {officers.length === 0 ? (
+          <p style={{ color: '#666', padding: '1rem 0.5rem' }}>No inspectors found.</p>
+        ) : (
+          officers.map((o) => (
+            <div key={o.inspectorId} style={{ ...rowStyle, color: '#e5e5e5' }}>
+              <span>{o.inspectorName}</span>
+              <span>{o.sessionsCount}</span>
+              <span>{o.itemsInspected}</span>
+              <span style={{ color: '#ff6666' }}>{o.substantiveCount}</span>
+              <span style={{ color: '#ffd13b' }}>{o.cosmeticCount}</span>
+              <span style={{ color: o.erroredCount > 0 ? '#ff6666' : '#666' }}>{o.erroredCount}</span>
+            </div>
+          ))
+        )}
       </section>
     </div>
   );

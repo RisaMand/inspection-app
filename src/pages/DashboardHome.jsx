@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   PieChart, Pie, Cell, Legend, Tooltip,
   LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
 } from 'recharts';
 import jsPDF from 'jspdf';
-import { getDashboardSummary, getViolationsByTier, getTrendingViolationTypes, getFilteredSessionsForExport, toRow } from '../dashboard/mockDashboardData';
+import { api } from '../lib/api/client';
 
 const TIER_COLORS = { substantive: '#ff6666', cosmetic: '#ffd13b' };
 
@@ -44,33 +44,6 @@ const cardValueStyle = {
   marginTop: '0.25rem',
 };
 
-function getImageDimensions(dataUrl) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
-    img.onerror = () => resolve({ width: 1, height: 1 });
-    img.src = dataUrl;
-  });
-}
-
-// Same SVG-to-JPEG normalization as FilterDrilldown's export — mock photos
-// are SVG placeholders, jsPDF.addImage needs real raster bytes.
-function normalizeToJpeg(dataUrl) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-      resolve(canvas.toDataURL('image/jpeg'));
-    };
-    img.onerror = reject;
-    img.src = dataUrl;
-  });
-}
-
 function SummaryCard({ label, value, color }) {
   return (
     <div style={cardStyle}>
@@ -80,9 +53,8 @@ function SummaryCard({ label, value, color }) {
   );
 }
 
-function TierBreakdownChart() {
-  const tierData = getViolationsByTier();
-  const total = tierData.reduce((sum, d) => sum + d.count, 0);
+function TierBreakdownChart({ byTier }) {
+  const total = byTier.reduce((sum, d) => sum + d.count, 0);
 
   return (
     <div style={chartPanelStyle}>
@@ -93,7 +65,7 @@ function TierBreakdownChart() {
         <ResponsiveContainer width="100%" height={220}>
           <PieChart>
             <Pie
-              data={tierData}
+              data={byTier}
               dataKey="count"
               nameKey="tier"
               cx="50%"
@@ -101,7 +73,7 @@ function TierBreakdownChart() {
               outerRadius={80}
               label={({ tier, count }) => `${tier}: ${count}`}
             >
-              {tierData.map((entry) => (
+              {byTier.map((entry) => (
                 <Cell key={entry.tier} fill={TIER_COLORS[entry.tier] || '#888'} />
               ))}
             </Pie>
@@ -116,9 +88,30 @@ function TierBreakdownChart() {
 
 const WINDOW_OPTIONS = [7, 30, 90];
 
-function TrendChart() {
+function windowStartISO(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString();
+}
+
+function TrendChart({ token }) {
   const [windowDays, setWindowDays] = useState(30);
-  const { byDay } = getTrendingViolationTypes(windowDays);
+  const [state, setState] = useState(() => ({ byDay: [], forWindow: null }));
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getDashboardSummary(token, { from: windowStartISO(windowDays) })
+      .then((summary) => {
+        if (!cancelled) setState({ byDay: summary.byDay || [], forWindow: windowDays });
+      })
+      .catch(() => {
+        if (!cancelled) setState({ byDay: [], forWindow: windowDays });
+      });
+    return () => { cancelled = true; };
+  }, [token, windowDays]);
+
+  const loading = state.forWindow !== windowDays;
+  const byDay = state.byDay;
 
   return (
     <div style={chartPanelStyle}>
@@ -134,7 +127,9 @@ function TrendChart() {
           ))}
         </select>
       </div>
-      {byDay.length === 0 ? (
+      {loading ? (
+        <p style={{ color: '#666' }}>Loading…</p>
+      ) : byDay.length === 0 ? (
         <p style={{ color: '#666' }}>No inspections in this window.</p>
       ) : (
         <ResponsiveContainer width="100%" height={220}>
@@ -144,7 +139,7 @@ function TrendChart() {
             <YAxis stroke="#888" fontSize={12} allowDecimals={false} />
             <Tooltip contentStyle={{ background: '#181818', border: '1px solid #333' }} />
             <Legend />
-            <Line type="monotone" dataKey="totalInspections" name="Total Inspections" stroke="#5cd65c" strokeWidth={2} />
+            <Line type="monotone" dataKey="total" name="Total Inspections" stroke="#5cd65c" strokeWidth={2} />
             <Line type="monotone" dataKey="nonCompliant" name="Non-Compliant" stroke="#ff6666" strokeWidth={2} />
           </LineChart>
         </ResponsiveContainer>
@@ -153,88 +148,125 @@ function TrendChart() {
   );
 }
 
-export default function DashboardHome() {
-  const summary = getDashboardSummary();
+export default function DashboardHome({ token }) {
+  const [summary, setSummary] = useState(null);
+  const [byTier, setByTier] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
-  async function exportAllPDF() {
-    const pairs = getFilteredSessionsForExport({}); // no filters = everything
-    const doc = new jsPDF();
-    let y = 15;
-
-    doc.setFontSize(16);
-    doc.text('Full Inspection Report — All Sessions', 10, y);
-    y += 8;
-    doc.setFontSize(10);
-    doc.text(`${pairs.length} item(s) total`, 10, y);
-    y += 12;
-
-    for (const { item, session } of pairs) {
-      if (y > 240) {
-        doc.addPage();
-        y = 15;
-      }
-
-      const row = toRow(item, session);
-      doc.setFontSize(12);
-      doc.text(`Visit ${row.visitNumber} — Shop ${row.shopNumber}`, 10, y);
-      y += 6;
-      doc.setFontSize(10);
-      doc.text(`Inspector: ${row.inspectorName}  |  Product: ${row.productName}`, 10, y);
-      y += 6;
-      doc.text(`Date: ${new Date(row.createdAt).toLocaleDateString()}  |  Verdict: ${row.verdict}`, 10, y);
-      y += 7;
-
-      if (item.checkResult?.failures?.length > 0) {
-        item.checkResult.failures.forEach((f) => {
-          doc.text(` • [${f.clause_citation || f.rule_id}]: ${f.reason}`, 15, y);
-          y += 5;
-        });
-      } else {
-        doc.text('No violations detected.', 15, y);
-        y += 5;
-      }
-
-      let x = 10;
-      const rawPhotos = item.photos || [];
-      const normalizedPhotos = await Promise.all(
-        rawPhotos.map((p) => normalizeToJpeg(p).catch(() => null))
-      );
-      const photoDims = await Promise.all(rawPhotos.map(getImageDimensions));
-      normalizedPhotos.forEach((jpeg, i) => {
-        if (!jpeg) return;
-        if (x > 150) {
-          x = 10;
-          y += 35;
-        }
-        const { width: natW, height: natH } = photoDims[i];
-        const maxBox = 30;
-        const scale = Math.min(maxBox / natW, maxBox / natH);
-        try {
-          doc.addImage(jpeg, 'JPEG', x, y, natW * scale, natH * scale);
-        } catch (e) {
-          // skip a photo that fails to embed rather than break the whole export
-        }
-        x += 35;
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([api.getDashboardSummary(token), api.getViolations(token)])
+      .then(([summaryData, violationsData]) => {
+        if (cancelled) return;
+        setSummary(summaryData);
+        setByTier(violationsData.byTier || []);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err.message || 'Failed to load dashboard');
+        setLoading(false);
       });
+    return () => { cancelled = true; };
+  }, [token]);
 
-      y += 40;
+  // Section 2.8: the mock's full-export embedded every item's photos
+  // directly. The real per-row list endpoint (GET /dashboard/inspections)
+  // only has raw Supabase Storage PATHS on image_references, not signed
+  // URLs -- only getReportData signs those, one inspection at a time.
+  // Signing every photo of every inspection in a full export would mean
+  // one getReportData call per row, which doesn't scale for "export
+  // everything". So this export includes full violation text/verdict data
+  // for every inspection, but not embedded photos -- a real, stated
+  // limitation, not a silently dropped feature. Individual per-item PDFs
+  // (ReportViewer's own view) still have real photos, since that path
+  // already signs URLs per-request.
+  async function exportAllPDF() {
+    setExporting(true);
+    try {
+      const allRows = [];
+      let page = 1;
+      const limit = 100;
+      let totalPages = 1;
+      do {
+        const { data, meta } = await api.getFilteredInspections(token, { page, limit });
+        allRows.push(...data);
+        totalPages = meta?.totalPages || 1;
+        page += 1;
+      } while (page <= totalPages);
+
+      const doc = new jsPDF();
+      let y = 15;
+
+      doc.setFontSize(16);
+      doc.text('Full Inspection Report — All Sessions', 10, y);
+      y += 8;
+      doc.setFontSize(10);
+      doc.text(`${allRows.length} item(s) total (photos: see individual report for each item)`, 10, y);
+      y += 12;
+
+      for (const row of allRows) {
+        if (y > 260) {
+          doc.addPage();
+          y = 15;
+        }
+
+        const verdict = row.compliance_result?.verdict || row.status;
+        doc.setFontSize(12);
+        doc.text(`Visit ${row.visit_number || '—'} — Shop ${row.shop_number || '—'}`, 10, y);
+        y += 6;
+        doc.setFontSize(10);
+        doc.text(`Product: ${row.product_name || '—'}`, 10, y);
+        y += 6;
+        doc.text(`Date: ${new Date(row.updated_at).toLocaleDateString()}  |  Verdict: ${verdict}`, 10, y);
+        y += 7;
+
+        const failures = row.compliance_result?.failures || [];
+        if (failures.length > 0) {
+          failures.forEach((f) => {
+            if (y > 275) {
+              doc.addPage();
+              y = 15;
+            }
+            doc.text(` • [${f.clause_citation || f.rule_id}]: ${f.reason}`, 15, y);
+            y += 5;
+          });
+        } else {
+          doc.text('No violations detected.', 15, y);
+          y += 5;
+        }
+
+        y += 8;
+      }
+
+      doc.save(`full-inspection-report-${Date.now()}.pdf`);
+    } finally {
+      setExporting(false);
     }
+  }
 
-    doc.save(`full-inspection-report-${Date.now()}.pdf`);
+  if (loading) {
+    return <div style={{ padding: '2rem' }}>Loading dashboard…</div>;
+  }
+
+  if (error) {
+    return <div style={{ padding: '2rem' }}>Failed to load dashboard: {error}</div>;
   }
 
   return (
     <div style={{ padding: '2rem', maxWidth: 900, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Dashboard</h1>
-        <button onClick={exportAllPDF} style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem', height: 'fit-content' }}>
-          Export Full Report ({summary.totalItemsInspected})
+        <button onClick={exportAllPDF} disabled={exporting} style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem', height: 'fit-content' }}>
+          {exporting ? 'Exporting…' : `Export Full Report (${summary.totalInspections})`}
         </button>
       </div>
 
       <section style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '2rem' }}>
         <SummaryCard label="Total Sessions" value={summary.totalSessions} />
-        <SummaryCard label="Items Inspected" value={summary.totalItemsInspected} />
+        <SummaryCard label="Items Inspected" value={summary.totalInspections} />
         <SummaryCard label="Compliant" value={summary.compliant} color="#5cd65c" />
         <SummaryCard label="With Warnings" value={summary.compliantWithWarnings} color="#ffd13b" />
         <SummaryCard label="Non-Compliant" value={summary.nonCompliant} color="#ff6666" />
@@ -244,8 +276,8 @@ export default function DashboardHome() {
       </section>
 
       <section style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-        <TierBreakdownChart />
-        <TrendChart />
+        <TierBreakdownChart byTier={byTier} />
+        <TrendChart token={token} />
       </section>
     </div>
   );

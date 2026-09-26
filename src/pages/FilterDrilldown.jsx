@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import jsPDF from 'jspdf';
-import { getFilteredSessions, getFilteredSessionsForExport, MOCK_INSPECTORS, toRow } from '../dashboard/mockDashboardData';
+import { api } from '../lib/api/client';
 
 const VERDICT_COLORS = {
   COMPLIANT: '#5cd65c',
@@ -43,54 +43,50 @@ const rowStyle = {
   alignItems: 'center',
 };
 
-const EMPTY_FILTERS = { dateFrom: '', dateTo: '', inspectorId: '', shop: '', severity: '' };
+const EMPTY_FILTERS = { from: '', to: '', inspectorId: '', shop: '', severity: '' };
 
 function buildActiveFilters(filters) {
   return {
-    dateFrom: filters.dateFrom || undefined,
-    dateTo: filters.dateTo || undefined,
+    from: filters.from ? new Date(filters.from).toISOString() : undefined,
+    // end-of-day for an inclusive "to" date picked from a plain <input type="date">
+    to: filters.to ? new Date(filters.to + 'T23:59:59.999Z').toISOString() : undefined,
     inspectorId: filters.inspectorId || undefined,
     shop: filters.shop || undefined,
     severity: filters.severity || undefined,
   };
 }
 
-function getImageDimensions(dataUrl) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
-    img.onerror = () => resolve({ width: 1, height: 1 });
-    img.src = dataUrl;
-  });
-}
-
-// Mock item photos are SVG placeholders (fine for on-screen <img>), but
-// jsPDF.addImage only accepts real raster bytes (JPEG/PNG). Draw whatever
-// format comes in onto an offscreen canvas and re-encode as JPEG — same
-// technique already used for real captured photos (see the "Normalize all
-// uploaded photos to JPEG via canvas re-encode" commit), extended here to
-// also cover SVG, which real camera captures never produce but this mock
-// data does.
-function normalizeToJpeg(dataUrl) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-      resolve(canvas.toDataURL('image/jpeg'));
-    };
-    img.onerror = reject;
-    img.src = dataUrl;
-  });
-}
-
-export default function FilterDrilldown() {
+export default function FilterDrilldown({ token }) {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [inspectors, setInspectors] = useState([]);
+  const [state, setState] = useState(() => ({ results: [], forKey: null }));
+  const [exporting, setExporting] = useState(false);
 
-  const results = useMemo(() => getFilteredSessions(buildActiveFilters(filters)), [filters]);
+  const inspectorNameById = useMemo(
+    () => new Map(inspectors.map((i) => [i.id, i.full_name])),
+    [inspectors]
+  );
+
+  const filtersKey = JSON.stringify(buildActiveFilters(filters));
+
+  useEffect(() => {
+    api.getInspectors(token).then(setInspectors).catch(() => setInspectors([]));
+  }, [token]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getFilteredInspections(token, { ...JSON.parse(filtersKey), limit: 100 })
+      .then(({ data }) => {
+        if (!cancelled) setState({ results: data, forKey: filtersKey });
+      })
+      .catch(() => {
+        if (!cancelled) setState({ results: [], forKey: filtersKey });
+      });
+    return () => { cancelled = true; };
+  }, [token, filtersKey]);
+
+  const loading = state.forKey !== filtersKey;
+  const results = state.results;
 
   function update(field, value) {
     setFilters((prev) => ({ ...prev, [field]: value }));
@@ -100,76 +96,66 @@ export default function FilterDrilldown() {
     setFilters(EMPTY_FILTERS);
   }
 
+  // Section 2.8: like DashboardHome's export, this doesn't embed photos --
+  // the list endpoint's image_references are raw unsigned storage paths,
+  // and signing every photo of every matching row isn't worth an N-call
+  // fan-out just for a bulk PDF. Full violation text/verdict data is
+  // still complete; individual reports (via ReportViewer) still have real photos.
   async function exportFilteredPDF() {
-    const pairs = getFilteredSessionsForExport(buildActiveFilters(filters));
-    const doc = new jsPDF();
-    let y = 15;
+    setExporting(true);
+    try {
+      const doc = new jsPDF();
+      let y = 15;
 
-    doc.setFontSize(16);
-    doc.text('Filtered Inspection Report', 10, y);
-    y += 8;
-    doc.setFontSize(10);
-    doc.text(`${pairs.length} item(s) matching current filters`, 10, y);
-    y += 12;
-
-    if (pairs.length === 0) {
-      doc.text('No items match the current filters.', 10, y);
-    }
-
-    for (const { item, session } of pairs) {
-      if (y > 240) {
-        doc.addPage();
-        y = 15;
-      }
-
-      const row = toRow(item, session);
-      const verdict = row.verdict;
-      doc.setFontSize(12);
-      doc.text(`Visit ${row.visitNumber} — Shop ${row.shopNumber}`, 10, y);
-      y += 6;
+      doc.setFontSize(16);
+      doc.text('Filtered Inspection Report', 10, y);
+      y += 8;
       doc.setFontSize(10);
-      doc.text(`Inspector: ${row.inspectorName}  |  Product: ${row.productName}`, 10, y);
-      y += 6;
-      doc.text(`Date: ${new Date(row.createdAt).toLocaleDateString()}  |  Verdict: ${verdict}`, 10, y);
-      y += 7;
+      doc.text(`${results.length} item(s) matching current filters`, 10, y);
+      y += 12;
 
-      if (item.checkResult?.failures?.length > 0) {
-        item.checkResult.failures.forEach((f) => {
-          doc.text(` • [${f.clause_citation || f.rule_id}]: ${f.reason}`, 15, y);
-          y += 5;
-        });
-      } else {
-        doc.text('No violations detected.', 15, y);
-        y += 5;
+      if (results.length === 0) {
+        doc.text('No items match the current filters.', 10, y);
       }
 
-      let x = 10;
-      const rawPhotos = item.photos || [];
-      const normalizedPhotos = await Promise.all(
-        rawPhotos.map((p) => normalizeToJpeg(p).catch(() => null))
-      );
-      const photoDims = await Promise.all(rawPhotos.map(getImageDimensions));
-      normalizedPhotos.forEach((jpeg, i) => {
-        if (!jpeg) return; // this one photo failed to normalize, skip only it
-        if (x > 150) {
-          x = 10;
-          y += 35;
+      for (const row of results) {
+        if (y > 260) {
+          doc.addPage();
+          y = 15;
         }
-        const { width: natW, height: natH } = photoDims[i];
-        const maxBox = 30;
-        const scale = Math.min(maxBox / natW, maxBox / natH);
-        try {
-          doc.addImage(jpeg, 'JPEG', x, y, natW * scale, natH * scale);
-        } catch (e) {
-          // skip a photo that fails to embed rather than break the whole export
-        }
-        x += 35;
-      });
 
-      y += 40;
+        const verdict = row.compliance_result?.verdict || row.status;
+        doc.setFontSize(12);
+        doc.text(`Visit ${row.visit_number || '—'} — Shop ${row.shop_number || '—'}`, 10, y);
+        y += 6;
+        doc.setFontSize(10);
+        doc.text(`Product: ${row.product_name || '—'}`, 10, y);
+        y += 6;
+        doc.text(`Date: ${new Date(row.updated_at).toLocaleDateString()}  |  Verdict: ${verdict}`, 10, y);
+        y += 7;
+
+        const failures = row.compliance_result?.failures || [];
+        if (failures.length > 0) {
+          failures.forEach((f) => {
+            if (y > 275) {
+              doc.addPage();
+              y = 15;
+            }
+            doc.text(` • [${f.clause_citation || f.rule_id}]: ${f.reason}`, 15, y);
+            y += 5;
+          });
+        } else {
+          doc.text('No violations detected.', 15, y);
+          y += 5;
+        }
+
+        y += 8;
+      }
+
+      doc.save(`filtered-inspection-report-${Date.now()}.pdf`);
+    } finally {
+      setExporting(false);
     }
-
-    doc.save(`filtered-inspection-report-${Date.now()}.pdf`);
   }
 
   return (
@@ -180,18 +166,18 @@ export default function FilterDrilldown() {
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
           <div style={{ minWidth: 160 }}>
             <label style={labelStyle}>From</label>
-            <input type="date" style={inputStyle} value={filters.dateFrom} onChange={(e) => update('dateFrom', e.target.value)} />
+            <input type="date" style={inputStyle} value={filters.from} onChange={(e) => update('from', e.target.value)} />
           </div>
           <div style={{ minWidth: 160 }}>
             <label style={labelStyle}>To</label>
-            <input type="date" style={inputStyle} value={filters.dateTo} onChange={(e) => update('dateTo', e.target.value)} />
+            <input type="date" style={inputStyle} value={filters.to} onChange={(e) => update('to', e.target.value)} />
           </div>
           <div style={{ minWidth: 180 }}>
             <label style={labelStyle}>Inspector</label>
             <select style={inputStyle} value={filters.inspectorId} onChange={(e) => update('inspectorId', e.target.value)}>
               <option value="">All inspectors</option>
-              {MOCK_INSPECTORS.map((i) => (
-                <option key={i.id} value={i.id}>{i.name}</option>
+              {inspectors.map((i) => (
+                <option key={i.id} value={i.id}>{i.full_name}</option>
               ))}
             </select>
           </div>
@@ -205,8 +191,6 @@ export default function FilterDrilldown() {
               <option value="">All tiers</option>
               <option value="substantive">Substantive</option>
               <option value="cosmetic">Cosmetic</option>
-              <option value="compliant">Compliant</option>
-              <option value="errored">Errored</option>
             </select>
           </div>
         </div>
@@ -216,10 +200,10 @@ export default function FilterDrilldown() {
           </button>
           <button
             onClick={exportFilteredPDF}
-            disabled={results.length === 0}
+            disabled={results.length === 0 || exporting}
             style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem', opacity: results.length === 0 ? 0.5 : 1 }}
           >
-            Export Filtered PDF ({results.length})
+            {exporting ? 'Exporting…' : `Export Filtered PDF (${results.length})`}
           </button>
         </div>
       </section>
@@ -234,19 +218,24 @@ export default function FilterDrilldown() {
           <span>Date</span>
         </div>
 
-        {results.length === 0 ? (
+        {loading ? (
+          <p style={{ color: '#666', padding: '1rem 0.5rem' }}>Loading…</p>
+        ) : results.length === 0 ? (
           <p style={{ color: '#666', padding: '1rem 0.5rem' }}>No results match these filters.</p>
         ) : (
-          results.map((row) => (
-            <Link key={row.itemId} to={`/dashboard/report/${row.itemId}`} style={{ ...rowStyle, color: '#e5e5e5', textDecoration: 'none' }}>
-              <span>{row.visitNumber || '—'}</span>
-              <span>{row.shopNumber || '—'}</span>
-              <span>{row.inspectorName}</span>
-              <span>{row.productName}</span>
-              <span style={{ color: VERDICT_COLORS[row.verdict] || '#e5e5e5', fontWeight: 'bold' }}>{row.verdict}</span>
-              <span>{new Date(row.createdAt).toLocaleDateString()}</span>
-            </Link>
-          ))
+          results.map((row) => {
+            const verdict = row.compliance_result?.verdict || row.status;
+            return (
+              <Link key={row.id} to={`/dashboard/report/${row.id}`} style={{ ...rowStyle, color: '#e5e5e5', textDecoration: 'none' }}>
+                <span>{row.visit_number || '—'}</span>
+                <span>{row.shop_number || '—'}</span>
+                <span>{inspectorNameById.get(row.inspector_id) || '—'}</span>
+                <span>{row.product_name || '—'}</span>
+                <span style={{ color: VERDICT_COLORS[verdict] || '#e5e5e5', fontWeight: 'bold' }}>{verdict}</span>
+                <span>{new Date(row.updated_at).toLocaleDateString()}</span>
+              </Link>
+            );
+          })
         )}
 
         <p style={{ color: '#666', fontSize: '0.8rem', marginTop: '0.75rem' }}>

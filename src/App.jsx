@@ -46,19 +46,19 @@ export default function App() {
           <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="inspector"><ConsolidatedReport session={session} endSession={endSession} /></ProtectedRoute>
         } />
         <Route path="/dashboard" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="official"><DashboardHome /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="official"><DashboardHome token={token} /></ProtectedRoute>
         } />
         <Route path="/dashboard/filter" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="official"><FilterDrilldown /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="official"><FilterDrilldown token={token} /></ProtectedRoute>
         } />
         <Route path="/dashboard/search" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="official"><Search /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="official"><Search token={token} /></ProtectedRoute>
         } />
         <Route path="/dashboard/report/:id" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="official"><ReportViewer /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="official"><ReportViewer token={token} /></ProtectedRoute>
         } />
         <Route path="/dashboard/officer" element={
-          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="official"><OfficerActivity /></ProtectedRoute>
+          <ProtectedRoute isLoggedIn={isLoggedIn} authLoaded={authLoaded} role={role} allowedRole="official"><OfficerActivity token={token} /></ProtectedRoute>
         } />
       </Routes>
     </BrowserRouter>

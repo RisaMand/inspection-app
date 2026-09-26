@@ -7,7 +7,7 @@
 // or tested by the app's own test runner at all until this guard existed.
 const API_BASE = (typeof import.meta.env !== 'undefined' && import.meta.env.VITE_API_URL) || 'http://localhost:5000/api/v1';
 
-async function request(path, { method = 'GET', body, token } = {}) {
+async function request(path, { method = 'GET', body, token, includeMeta = false } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -24,7 +24,11 @@ async function request(path, { method = 'GET', body, token } = {}) {
     err.code = data?.error?.code;
     throw err;
   }
-  return data?.data;
+  // includeMeta: pagination endpoints (page/limit/total/totalPages) put
+  // that in the response envelope's `meta`, a sibling of `data` -- every
+  // other caller only ever wanted `data` itself, so this defaults off to
+  // avoid changing behavior for the 10+ existing call sites above.
+  return includeMeta ? { data: data?.data, meta: data?.meta } : data?.data;
 }
 
 export const api = {
@@ -60,4 +64,42 @@ export const api = {
     request(`/products/lookup?barcode=${encodeURIComponent(barcode)}`, { token }),
   getProductHistory: (token, productId) =>
     request(`/products/${productId}/history`, { token }),
+
+  // Section 2.8: dashboard screens, previously all on mockDashboardData.js.
+  // getReportData: the full per-item report contract (verdict, extracted
+  // fields, signed photo URLs, visit/inspector context) -- see
+  // translateReportForDisplay.js for the {item, session} shape adapter
+  // ReportViewer.jsx/ComplianceReportBody.jsx actually need.
+  getReportData: (token, id) =>
+    request(`/inspections/${id}/report-data`, { token }),
+  getDashboardSummary: (token, { from, to } = {}) => {
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    const qs = params.toString();
+    return request(`/dashboard/summary${qs ? `?${qs}` : ''}`, { token });
+  },
+  getViolations: (token) =>
+    request('/dashboard/violations', { token }),
+  getOfficerActivity: (token) =>
+    request('/dashboard/officer-activity', { token }),
+  getInspectors: (token) =>
+    request('/dashboard/inspectors', { token }),
+  searchDashboard: (token, q) =>
+    request(`/dashboard/search?q=${encodeURIComponent(q)}`, { token }),
+  // Backs FilterDrilldown.jsx -- date range/shop/severity filters added to
+  // the shared getInspections handler in the 2.8 backend patch. Returns
+  // {data, meta} (meta carries total/page/limit/totalPages for pagination
+  // controls) rather than just data, since this is the first paginated
+  // endpoint this client has ever called.
+  getFilteredInspections: (token, filters = {}) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== undefined && value !== null && value !== '') {
+        params.set(key, value);
+      }
+    }
+    const qs = params.toString();
+    return request(`/dashboard/inspections${qs ? `?${qs}` : ''}`, { token, includeMeta: true });
+  },
 };
