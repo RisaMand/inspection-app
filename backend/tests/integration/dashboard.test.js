@@ -215,6 +215,77 @@ describe('Dashboard summary — time window + trending (Closeout Step 6)', () =>
       .set('Authorization', 'Bearer ' + officialToken);
     expect(scopedRes.body.data.byDay.find((d) => d.date === todayStr)).toBeUndefined();
   });
+
+  it('reports real session-level context: totalSessions, distinctShopsVisited, activeInspectors', async () => {
+    var tag = 'SESSCTX-' + crypto.randomUUID().slice(0, 8);
+
+    var sessionRes = await request(app)
+      .post('/api/v1/sessions')
+      .set('Authorization', 'Bearer ' + inspectorToken)
+      .send({ visit_number: 'V-' + tag, shop_number: 'SHOP-' + tag });
+    expect(sessionRes.statusCode).toEqual(201);
+
+    var beforeRes = await request(app)
+      .get('/api/v1/dashboard/summary?to=2020-01-01T00:00:00.000Z')
+      .set('Authorization', 'Bearer ' + officialToken);
+    var beforeSessions = beforeRes.body.data.totalSessions;
+
+    var afterRes = await request(app)
+      .get('/api/v1/dashboard/summary')
+      .set('Authorization', 'Bearer ' + officialToken);
+
+    expect(afterRes.body.data.totalSessions).toBeGreaterThan(beforeSessions);
+    expect(afterRes.body.data.distinctShopsVisited).toBeGreaterThanOrEqual(1);
+    expect(afterRes.body.data.activeInspectors).toBeGreaterThanOrEqual(1);
+    // The window-scoped query correctly excludes the just-created session
+    expect(beforeRes.body.data.totalSessions).toBe(0);
+  });
+
+  it('breaks compliant/warnings/errored out as distinct fields, not just the 2 lumped buckets', async () => {
+    var tag = 'VERDICTSPLIT-' + crypto.randomUUID().slice(0, 8);
+    var syncRes = await request(app)
+      .post('/api/v1/sync/inspections')
+      .set('Authorization', 'Bearer ' + inspectorToken)
+      .send({
+        idempotencyKey: crypto.randomUUID(),
+        items: [
+          {
+            clientInspectionId: crypto.randomUUID(),
+            operation: 'CREATE',
+            clientUpdatedAt: '2026-01-01T00:00:00.000Z',
+            ruleConfigVersion: ruleConfigVersion,
+            payload: {
+              productName: tag + '-warning-item',
+              complianceStatus: 'EVALUATED',
+              // NOT the shared complianceResult() helper -- it always
+              // writes NON_COMPLIANT for any failure regardless of
+              // severity, unlike the real evaluateVerdict() logic
+              // (cosmetic-only -> COMPLIANT_WITH_WARNINGS). Built directly
+              // here to exercise that real distinction.
+              complianceResult: {
+                verdict: 'COMPLIANT_WITH_WARNINGS',
+                totalRules: 8,
+                passedRules: 7,
+                failedRules: 1,
+                skippedRules: 0,
+                failures: [
+                  { rule_id: 'DECLARATION_FONT_SIZE', reason: 'Font below minimum', severity: 'cosmetic', clause_citation: 'Rule 7', confidence: 0.7 },
+                ],
+              },
+            },
+          },
+        ],
+      });
+    expect(syncRes.statusCode).toEqual(200);
+
+    var res = await request(app)
+      .get('/api/v1/dashboard/summary')
+      .set('Authorization', 'Bearer ' + officialToken);
+
+    expect(res.body.data.compliantWithWarnings).toBeGreaterThanOrEqual(1);
+    // Still counted in the lumped `compliant` bucket too, for backward compat
+    expect(res.body.data.compliant).toBeGreaterThanOrEqual(res.body.data.compliantWithWarnings);
+  });
 });
 
 // Section 2.8: GET /inspections (shared by /inspections and
@@ -519,6 +590,7 @@ describe('GET /dashboard/search — enriched inspection context (2.8)', () => {
     expect(row.inspector_name).toBeTruthy();
     expect(row.visit_number).toEqual('SV-' + tag);
     expect(row.shop_number).toEqual('SS-' + tag);
+    expect(row.verdict).toEqual('COMPLIANT');
   });
 
   it('still returns products and users categories unchanged', async () => {

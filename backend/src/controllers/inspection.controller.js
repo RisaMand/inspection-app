@@ -360,6 +360,7 @@ exports.getReportData = async (req, res) => {
     },
     extractedFields: data.extracted_fields,
     imageReferences: imageUrls,
+    ocrPayload: data.ocr_payload,
     ruleConfigVersion: data.rule_config_version,
     complianceResult: data.compliance_result,
     ruleEngineStatus: data.rule_engine_status,

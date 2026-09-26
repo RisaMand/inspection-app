@@ -152,9 +152,9 @@ describe('Inspection API Integration', () => {
         packer_name, packer_address, importer_name, importer_address,
         marketed_by_name, marketed_by_address,
         declared_quantity, mrp, mrp_raw_text, packed_date, expiry_date,
-        customer_care_details, barcode_value, client_updated_at
+        customer_care_details, barcode_value, client_updated_at, ocr_payload
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
       )
     `, [
       fullInspectionId, clientInspectionId,
@@ -169,7 +169,8 @@ describe('Inspection API Integration', () => {
       '500ml', 99.99, 'MRP Rs. 99.99',
       '2025-01-01', '2026-12-31',
       'Call 1800-XXX-XXXX', 'BAR123456',
-      '2026-01-01T00:00:00Z'
+      '2026-01-01T00:00:00Z',
+      JSON.stringify({ ocrText: 'MRP: Rs. 99.99', ocrRawText: 'MRP : Rs 99.99 raw', confidence: 0.88 }),
     ]);
 
     var res = await request(app)
@@ -204,6 +205,16 @@ describe('Inspection API Integration', () => {
     expect(visit.shopNumber).toEqual('SHOP-17');
     expect(Number(visit.gpsLat)).toBeCloseTo(19.076090, 5);
     expect(Number(visit.gpsLng)).toBeCloseTo(72.877426, 5);
+
+    // 2.8 fix: ocr_payload was fetched (SELECT i.*) but never placed into
+    // the response object -- silently dropped from the report contract
+    // despite being a real synced column. ReportViewer.jsx needs it for
+    // the "Label Text" / raw OCR sections.
+    expect(res.body.data.ocrPayload).toEqual({
+      ocrText: 'MRP: Rs. 99.99',
+      ocrRawText: 'MRP : Rs 99.99 raw',
+      confidence: 0.88,
+    });
   });
 
   it('Report data still works for inspections with no session_id (pre-Step-4 rows)', async () => {

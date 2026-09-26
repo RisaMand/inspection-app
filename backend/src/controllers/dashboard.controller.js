@@ -48,7 +48,7 @@ exports.getSummary = async (req, res) => {
     return all.length > 0 ? `WHERE ${all.join(' AND ')}` : '';
   };
 
-  const [totalRes, statusRes, ruleConfigRes, recentRes, complianceRes, trendingRes, dailyRes] = await Promise.all([
+  const [totalRes, statusRes, ruleConfigRes, recentRes, complianceRes, trendingRes, dailyRes, sessionStatsRes] = await Promise.all([
     pool.query(`SELECT COUNT(*) FROM inspections ${whereWith()}`, windowParams),
     pool.query(`SELECT status, COUNT(*) FROM inspections ${whereWith()} GROUP BY status`, windowParams),
     pool.query(`SELECT rule_config_version, COUNT(*) FROM inspections ${whereWith()} GROUP BY rule_config_version`, windowParams),
@@ -78,6 +78,18 @@ exports.getSummary = async (req, res) => {
       FROM inspections
       ${whereWith()}
     `, windowParams),
+    // DashboardHome's "Total Sessions" / "Shops Visited" / "Active
+    // Inspectors" cards -- none of these existed before (getSummary only
+    // ever counted inspections). Scoped to the same from/to window via the
+    // same whereWith() helper, since `sessions` also has its own
+    // created_at column.
+    pool.query(`
+      SELECT COUNT(*) AS total_sessions,
+             COUNT(DISTINCT shop_number) FILTER (WHERE shop_number IS NOT NULL) AS distinct_shops,
+             COUNT(DISTINCT inspector_id) AS active_inspectors
+      FROM sessions
+      ${whereWith()}
+    `, windowParams),
   ]);
 
   const summary = {
@@ -86,10 +98,24 @@ exports.getSummary = async (req, res) => {
     completed: 0,
     nonCompliant: 0,
     compliant: 0,
+    // Section 2.8: DashboardHome's cards distinguish all 4 verdicts
+    // separately (compliant / compliantWithWarnings / nonCompliant /
+    // errored) rather than the 2 lumped buckets above -- the per-verdict
+    // rows below already have this, just not exposed as its own field
+    // until now.
+    compliantWithWarnings: 0,
+    errored: 0,
     conflicted: 0,
     byRuleConfigVersion: ruleConfigRes.rows.map(r => ({ version: r.rule_config_version, count: parseInt(r.count, 10) })),
     recentInspections: recentRes.rows,
     window: { from: fromDate ? fromDate.toISOString() : null, to: toDate ? toDate.toISOString() : null },
+    // Section 2.8: previously only inspection-level counts existed --
+    // DashboardHome also needs visit-level context (sessions), which
+    // inspections alone can't answer (an inspector can log a session with
+    // zero items, and a shop is a session-level fact, not an inspection one).
+    totalSessions: parseInt(sessionStatsRes.rows[0].total_sessions, 10),
+    distinctShopsVisited: parseInt(sessionStatsRes.rows[0].distinct_shops, 10) || 0,
+    activeInspectors: parseInt(sessionStatsRes.rows[0].active_inspectors, 10) || 0,
   };
 
   statusRes.rows.forEach(r => {
@@ -101,6 +127,8 @@ exports.getSummary = async (req, res) => {
   complianceRes.rows.forEach(r => {
     if (r.verdict === 'NON_COMPLIANT' || r.verdict === 'ERROR') summary.nonCompliant += parseInt(r.count, 10);
     if (r.verdict === 'COMPLIANT' || r.verdict === 'COMPLIANT_WITH_WARNINGS') summary.compliant += parseInt(r.count, 10);
+    if (r.verdict === 'COMPLIANT_WITH_WARNINGS') summary.compliantWithWarnings = parseInt(r.count, 10);
+    if (r.verdict === 'ERROR') summary.errored = parseInt(r.count, 10);
   });
 
   const trendingMap = new Map();
@@ -153,6 +181,7 @@ exports.searchDashboard = async (req, res) => {
     pool.query(`
       SELECT
         i.id, i.client_inspection_id, i.product_name, i.brand_name, i.status, i.updated_at,
+        i.compliance_result->>'verdict' AS verdict,
         u.full_name AS inspector_name,
         s.visit_number, s.shop_number
       FROM inspections i
